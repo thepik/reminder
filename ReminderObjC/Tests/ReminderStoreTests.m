@@ -1,0 +1,143 @@
+#import <Foundation/Foundation.h>
+#import "../Sources/Models/ReminderCategory.h"
+#import "../Sources/Models/ReminderItem.h"
+#import "../Sources/Store/ReminderStore.h"
+
+static NSUInteger gFailures = 0;
+
+#define AssertTrue(condition, message) \
+    do { \
+        if (!(condition)) { \
+            gFailures++; \
+            NSLog(@"FAIL: %s", message); \
+        } \
+    } while (0)
+
+#define AssertEqualObjects(actual, expected, message) \
+    do { \
+        id actualValue = (actual); \
+        id expectedValue = (expected); \
+        if (![actualValue isEqual:expectedValue]) { \
+            gFailures++; \
+            NSLog(@"FAIL: %s\n  actual: %@\nexpected: %@", message, actualValue, expectedValue); \
+        } \
+    } while (0)
+
+static NSURL *TemporaryStoreURL(void) {
+    NSString *name = [[NSUUID UUID].UUIDString stringByAppendingPathExtension:@"json"];
+    return [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:name]];
+}
+
+static ReminderStore *MakeStore(NSURL **urlOut) {
+    NSURL *url = TemporaryStoreURL();
+    if (urlOut != NULL) {
+        *urlOut = url;
+    }
+    return [[ReminderStore alloc] initWithStorageURL:url];
+}
+
+static void TestDefaultCategories(void) {
+    ReminderStore *store = MakeStore(NULL);
+    NSArray<ReminderCategory *> *categories = store.categories;
+
+    AssertEqualObjects([categories valueForKey:@"identifier"], (@[@"work", @"life", @"quickCommand"]), "default category order");
+    AssertEqualObjects([categories valueForKey:@"displayName"], (@[@"工作", @"生活", @"快捷命令"]), "default category display names");
+    AssertTrue(categories[0].rowActions == ReminderRowActionDelete, "work only deletes");
+    AssertTrue(categories[1].rowActions == ReminderRowActionDelete, "life only deletes");
+    AssertTrue((categories[2].rowActions & ReminderRowActionCopy) != 0, "quick command copies");
+    AssertTrue((categories[2].rowActions & ReminderRowActionDelete) != 0, "quick command deletes");
+    AssertEqualObjects(store.currentCategoryID, @"work", "default category is work");
+}
+
+static void TestAddTrimAndCategoryIsolation(void) {
+    ReminderStore *store = MakeStore(NULL);
+
+    AssertTrue(![store addItemWithContent:@"   \n\t  "], "blank content is ignored");
+    AssertTrue([store addItemWithContent:@"  work item  "], "work item saves");
+    [store switchToCategory:@"life"];
+    AssertTrue([store addItemWithContent:@"life item"], "life item saves");
+    [store switchToCategory:@"quickCommand"];
+    AssertTrue([store addItemWithContent:@" cd /tmp && ls "], "quick command saves");
+
+    AssertEqualObjects([[store itemsForCategory:@"work"] valueForKey:@"content"], (@[@"work item"]), "work content is trimmed");
+    AssertEqualObjects([[store itemsForCategory:@"life"] valueForKey:@"content"], (@[@"life item"]), "life content is isolated");
+    AssertEqualObjects([[store currentItems] valueForKey:@"content"], (@[@"cd /tmp && ls"]), "current quick command content is trimmed");
+}
+
+static void TestDeleteOnlyRemovesFromMatchingCategory(void) {
+    ReminderStore *store = MakeStore(NULL);
+
+    [store addItemWithContent:@"work"];
+    NSString *workID = [store itemsForCategory:@"work"].firstObject.itemID;
+    [store switchToCategory:@"life"];
+    [store addItemWithContent:@"life"];
+
+    [store deleteItemWithID:workID categoryID:@"work"];
+
+    AssertTrue([store itemsForCategory:@"work"].count == 0, "work item removed");
+    AssertEqualObjects([[store itemsForCategory:@"life"] valueForKey:@"content"], (@[@"life"]), "life item remains");
+}
+
+static void TestLegacySnapshotMigration(void) {
+    NSURL *url = TemporaryStoreURL();
+    NSString *legacyJSON = @"{"
+        "\"schemaVersion\":1,"
+        "\"work\":[{\"id\":\"w1\",\"category\":\"work\",\"content\":\"legacy work\",\"createdAt\":\"2026-06-19T00:00:00Z\"}],"
+        "\"life\":[],"
+        "\"quickCommands\":[{\"id\":\"q1\",\"category\":\"quickCommand\",\"content\":\"legacy command\",\"createdAt\":\"2026-06-19T00:00:01Z\"}]"
+    "}";
+    [legacyJSON writeToURL:url atomically:YES encoding:NSUTF8StringEncoding error:nil];
+
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:url];
+
+    AssertEqualObjects([[store itemsForCategory:@"work"] valueForKey:@"content"], (@[@"legacy work"]), "legacy work loads");
+    AssertEqualObjects([[store itemsForCategory:@"quickCommand"] valueForKey:@"content"], (@[@"legacy command"]), "legacy quick commands load");
+}
+
+static void TestFlushWritesSchemaV2AndReloads(void) {
+    NSURL *url = nil;
+    ReminderStore *store = MakeStore(&url);
+    [store addItemWithContent:@"persisted work"];
+    [store switchToCategory:@"quickCommand"];
+    [store addItemWithContent:@"persisted command"];
+    [store flushSync];
+
+    NSData *data = [NSData dataWithContentsOfURL:url];
+    NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    AssertEqualObjects(json[@"schemaVersion"], @2, "schema version 2 is written");
+    AssertTrue([json[@"categories"] isKindOfClass:NSDictionary.class], "schema v2 has categories dictionary");
+
+    ReminderStore *reloaded = [[ReminderStore alloc] initWithStorageURL:url];
+    AssertEqualObjects([[reloaded itemsForCategory:@"work"] valueForKey:@"content"], (@[@"persisted work"]), "work reloads");
+    AssertEqualObjects([[reloaded itemsForCategory:@"quickCommand"] valueForKey:@"content"], (@[@"persisted command"]), "quick command reloads");
+}
+
+static void TestCorruptedJSONFallsBackToEmpty(void) {
+    NSURL *url = TemporaryStoreURL();
+    [@"not json" writeToURL:url atomically:YES encoding:NSUTF8StringEncoding error:nil];
+
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:url];
+
+    AssertTrue([store itemsForCategory:@"work"].count == 0, "corrupted work is empty");
+    AssertTrue([store itemsForCategory:@"life"].count == 0, "corrupted life is empty");
+    AssertTrue([store itemsForCategory:@"quickCommand"].count == 0, "corrupted quick command is empty");
+}
+
+int main(void) {
+    @autoreleasepool {
+        TestDefaultCategories();
+        TestAddTrimAndCategoryIsolation();
+        TestDeleteOnlyRemovesFromMatchingCategory();
+        TestLegacySnapshotMigration();
+        TestFlushWritesSchemaV2AndReloads();
+        TestCorruptedJSONFallsBackToEmpty();
+
+        if (gFailures > 0) {
+            NSLog(@"%lu test failure(s)", (unsigned long)gFailures);
+            return 1;
+        }
+
+        NSLog(@"All Objective-C store tests passed");
+        return 0;
+    }
+}

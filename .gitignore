@@ -8,3 +8,4 @@ dist/
 *.xcuserstate
 xcuserdata/
 /spec.md
+/VERSION_HISTORY.md

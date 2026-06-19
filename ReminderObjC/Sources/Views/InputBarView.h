@@ -1,0 +1,12 @@
+#import <AppKit/AppKit.h>
+
+typedef void (^ReminderInputSaveHandler)(NSString *text);
+
+@interface InputBarView : NSView <NSTextFieldDelegate>
+
+@property (nonatomic, copy) ReminderInputSaveHandler onSave;
+
+- (void)focusInput;
+- (void)clearInput;
+
+@end
