@@ -7,3 +7,4 @@ DerivedData/
 dist/
 *.xcuserstate
 xcuserdata/
+spec.md
