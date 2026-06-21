@@ -12,6 +12,48 @@ static const CGFloat ReminderInputHorizontalInset = 20.0;
     return NSEdgeInsetsMake(0, 0, 0, 0);
 }
 
+- (BOOL)performKeyEquivalent:(NSEvent *)event {
+    NSString *key = event.charactersIgnoringModifiers.lowercaseString;
+    NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+    BOOL isPasteShortcut = event.type == NSEventTypeKeyDown
+        && [key isEqualToString:@"v"]
+        && (flags & NSEventModifierFlagCommand) != 0
+        && (flags & (NSEventModifierFlagOption | NSEventModifierFlagControl)) == 0;
+
+    if (isPasteShortcut && [self pasteFromGeneralPasteboard]) {
+        return YES;
+    }
+
+    return [super performKeyEquivalent:event];
+}
+
+- (BOOL)pasteFromGeneralPasteboard {
+    if (!self.enabled || !self.editable) {
+        return NO;
+    }
+
+    NSString *pasteText = [NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString];
+    if (pasteText.length == 0) {
+        return NO;
+    }
+
+    NSText *editor = self.currentEditor;
+    if (editor) {
+        [editor replaceCharactersInRange:editor.selectedRange withString:pasteText];
+    } else {
+        NSString *currentText = self.stringValue ?: @"";
+        self.stringValue = [currentText stringByAppendingString:pasteText];
+    }
+
+    id<NSTextFieldDelegate> delegate = self.delegate;
+    if ([delegate respondsToSelector:@selector(controlTextDidChange:)]) {
+        NSNotification *notification = [NSNotification notificationWithName:NSControlTextDidChangeNotification object:self];
+        [delegate controlTextDidChange:notification];
+    }
+
+    return YES;
+}
+
 @end
 
 @interface InputBarView ()
