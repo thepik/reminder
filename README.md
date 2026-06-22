@@ -12,17 +12,24 @@ Reminder is a small native macOS app for fast capture, fast deletion, and quick 
 
 ## Run
 
-From this repository root:
+All build, run, test, and packaging tasks live in a single entry script:
 
 ```bash
-./script/build_and_run.sh
+./script/make.sh <command>
 ```
 
-Build the release app only:
+Available commands:
 
-```bash
-./script/build_app.sh
-```
+| Command  | Purpose                                          |
+| -------- | ------------------------------------------------ |
+| `build`  | Build the release `.app` into `dist/`            |
+| `run`    | Build and launch (default when no command given) |
+| `debug`  | Build and launch under `lldb`                    |
+| `logs`   | Launch and stream `os_log` output                |
+| `verify` | Launch and verify the process is alive (CI)      |
+| `test`   | Compile and run the store and layout tests       |
+| `dmg`    | Build and produce `dist/Reminder.dmg`            |
+| `clean`  | Remove `build/` and `dist/`                      |
 
 The release app is written to:
 
@@ -30,17 +37,7 @@ The release app is written to:
 dist/Reminder.app
 ```
 
-Run local store tests:
-
-```bash
-./script/test_objc.sh
-```
-
-Create a local DMG installer image:
-
-```bash
-./script/package_dmg.sh
-```
+Override the codesign identity via `SIGN_IDENTITY` (defaults to `-`, i.e. ad-hoc).
 
 Note: in some sandboxed shell environments, `open` may fail even for system apps. The run script reports that case and falls back where possible; Finder/Dock launch should be tested outside that restricted shell.
 

@@ -12,17 +12,24 @@ Reminder 是一个小巧的原生 macOS 应用，用于快速记录、快速删�
 
 ## 运行
 
-在仓库根目录运行：
+所有构建、运行、测试、打包都收敛到同一个入口脚本：
 
 ```bash
-./script/build_and_run.sh
+./script/make.sh <子命令>
 ```
 
-只构建发布版应用：
+可用子命令：
 
-```bash
-./script/build_app.sh
-```
+| 子命令   | 用途                                |
+| -------- | ----------------------------------- |
+| `build`  | 构建发布版 `.app` 到 `dist/`        |
+| `run`    | 构建并启动（不传子命令时的默认值）  |
+| `debug`  | 构建后用 `lldb` 启动                |
+| `logs`   | 启动并流式查看 `os_log`             |
+| `verify` | 启动并验证进程存活（CI 友好）       |
+| `test`   | 编译并运行存储 / 布局测试           |
+| `dmg`    | 构建并生成 `dist/Reminder.dmg`      |
+| `clean`  | 清理 `build/` 与 `dist/`            |
 
 发布版应用会输出到：
 
@@ -30,17 +37,7 @@ Reminder 是一个小巧的原生 macOS 应用，用于快速记录、快速删�
 dist/Reminder.app
 ```
 
-运行本地存储测试：
-
-```bash
-./script/test_objc.sh
-```
-
-创建本地 DMG 安装镜像：
-
-```bash
-./script/package_dmg.sh
-```
+如需指定 codesign 身份，通过环境变量 `SIGN_IDENTITY` 覆盖（默认 `-`，即 ad-hoc 签名）。
 
 注意：在某些受沙盒限制的 shell 环境中，即使是系统应用，`open` 也可能失败。运行脚本会报告这种情况，并在可行时使用备用方式；通过 Finder 或 Dock 启动应用时，应在不受该限制的环境中验证。
 
