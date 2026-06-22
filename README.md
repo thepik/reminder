@@ -1,5 +1,7 @@
 # Reminder
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 Reminder is a small native macOS app for fast capture, fast deletion, and quick command copying.
 
 ## Requirements
