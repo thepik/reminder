@@ -42,7 +42,7 @@ static void TestListDocumentViewUsesTopOrigin(void) {
 }
 
 static void TestInputPlaceholderUsesTwentyPointInsetAndVerticalCenter(void) {
-    InputBarView *inputBar = [[InputBarView alloc] initWithFrame:NSMakeRect(0, 0, 320, 104)];
+    InputBarView *inputBar = [[InputBarView alloc] initWithFrame:NSMakeRect(0, 0, 320, 44)];
     inputBar.translatesAutoresizingMaskIntoConstraints = YES;
     [inputBar layoutSubtreeIfNeeded];
 
@@ -61,7 +61,7 @@ static void TestInputPlaceholderUsesTwentyPointInsetAndVerticalCenter(void) {
 }
 
 static void TestInputCommandVPastesClipboardText(void) {
-    InputBarView *inputBar = [[InputBarView alloc] initWithFrame:NSMakeRect(0, 0, 320, 104)];
+    InputBarView *inputBar = [[InputBarView alloc] initWithFrame:NSMakeRect(0, 0, 320, 44)];
     NSTextField *textField = [inputBar valueForKey:@"textField"];
     NSButton *saveButton = [inputBar valueForKey:@"saveButton"];
 

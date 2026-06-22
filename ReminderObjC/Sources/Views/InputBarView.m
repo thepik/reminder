@@ -113,19 +113,19 @@ static const CGFloat ReminderInputHorizontalInset = 20.0;
         [NSLayoutConstraint activateConstraints:@[
             [_inputContainer.topAnchor constraintEqualToAnchor:self.topAnchor],
             [_inputContainer.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-            [_inputContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [_inputContainer.trailingAnchor constraintEqualToAnchor:_saveButton.leadingAnchor constant:-8],
             [_inputContainer.heightAnchor constraintEqualToConstant:44],
+            [_inputContainer.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
 
             [_textField.leadingAnchor constraintEqualToAnchor:_inputContainer.leadingAnchor constant:ReminderInputHorizontalInset],
             [_textField.trailingAnchor constraintEqualToAnchor:_inputContainer.trailingAnchor constant:-ReminderInputHorizontalInset],
             [_textField.centerYAnchor constraintEqualToAnchor:_inputContainer.centerYAnchor],
             [_textField.heightAnchor constraintEqualToConstant:24],
 
-            [_saveButton.topAnchor constraintEqualToAnchor:_inputContainer.bottomAnchor constant:16],
-            [_saveButton.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+            [_saveButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [_saveButton.centerYAnchor constraintEqualToAnchor:_inputContainer.centerYAnchor],
             [_saveButton.widthAnchor constraintEqualToConstant:105],
-            [_saveButton.heightAnchor constraintEqualToConstant:44],
-            [_saveButton.bottomAnchor constraintEqualToAnchor:self.bottomAnchor]
+            [_saveButton.heightAnchor constraintEqualToAnchor:_inputContainer.heightAnchor],
         ]];
 
         [self updateSaveButton];

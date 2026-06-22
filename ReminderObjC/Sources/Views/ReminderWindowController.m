@@ -94,7 +94,7 @@
         [self.inputBar.leadingAnchor constraintEqualToAnchor:rootView.leadingAnchor constant:40],
         [self.inputBar.trailingAnchor constraintEqualToAnchor:rootView.trailingAnchor constant:-40],
         [self.inputBar.bottomAnchor constraintEqualToAnchor:rootView.bottomAnchor constant:-32],
-        [self.inputBar.heightAnchor constraintEqualToConstant:104],
+        [self.inputBar.heightAnchor constraintEqualToConstant:44],
 
         [self.scrollView.topAnchor constraintEqualToAnchor:self.tabView.bottomAnchor constant:24],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:rootView.leadingAnchor constant:40],
