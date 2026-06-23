@@ -17,7 +17,15 @@
         self.layer.cornerRadius = 4.0;
         self.translatesAutoresizingMaskIntoConstraints = NO;
 
-        NSTextField *label = [NSTextField labelWithString:item.content];
+        NSTextField *label = [[NSTextField alloc] init];
+        label.stringValue = item.content ?: @"";
+        label.editable = NO;
+        label.selectable = YES;
+        label.enabled = YES;
+        label.bordered = NO;
+        label.bezeled = NO;
+        label.drawsBackground = NO;
+        label.focusRingType = NSFocusRingTypeNone;
         label.font = [ReminderTheme regularFontOfSize:16];
         label.textColor = NSColor.whiteColor;
         label.lineBreakMode = NSLineBreakByTruncatingTail;

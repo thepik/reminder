@@ -2,6 +2,7 @@
 #import <math.h>
 #import "../Sources/Store/ReminderStore.h"
 #import "../Sources/Views/InputBarView.h"
+#import "../Sources/Views/ReminderRowView.h"
 #import "../Sources/Views/ReminderWindowController.h"
 
 static NSUInteger gFailures = 0;
@@ -88,11 +89,38 @@ static void TestInputCommandVPastesClipboardText(void) {
     AssertTrue(saveButton.enabled, "pasted input must enable the save button");
 }
 
+static NSTextField *FindRowTextField(ReminderRowView *row) {
+    for (NSView *subview in row.subviews) {
+        if ([subview isKindOfClass:NSTextField.class]) {
+            return (NSTextField *)subview;
+        }
+    }
+    return nil;
+}
+
+static void TestRowTextIsSelectableButNotEditable(void) {
+    ReminderItem *item = [[ReminderItem alloc] initWithItemID:@"row-1"
+                                                   categoryID:@"work"
+                                                      content:@"copy partial text"
+                                                    createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
+    ReminderCategory *category = [ReminderCategory.defaultCategories firstObject];
+    ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
+
+    NSTextField *textField = FindRowTextField(row);
+
+    AssertTrue(textField != nil, "row must render item content in a text field");
+    AssertEqualObjects(textField.stringValue, @"copy partial text", "row text field must show item content");
+    AssertTrue(textField.isEnabled, "row text field must be enabled for selection");
+    AssertTrue(textField.isSelectable, "row text field must allow mouse selection for command-c");
+    AssertTrue(!textField.isEditable, "row text field must not edit saved item content");
+}
+
 int main(void) {
     @autoreleasepool {
         TestListDocumentViewUsesTopOrigin();
         TestInputPlaceholderUsesTwentyPointInsetAndVerticalCenter();
         TestInputCommandVPastesClipboardText();
+        TestRowTextIsSelectableButNotEditable();
 
         if (gFailures > 0) {
             NSLog(@"%lu layout test failure(s)", (unsigned long)gFailures);
