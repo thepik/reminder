@@ -1,6 +1,59 @@
 #import "ReminderRowView.h"
 #import "../Theme/ReminderTheme.h"
 
+@interface ReminderRowTextField : NSTextField
+@end
+
+@implementation ReminderRowTextField
+
+- (BOOL)performKeyEquivalent:(NSEvent *)event {
+    NSString *key = event.charactersIgnoringModifiers.lowercaseString;
+    NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+    BOOL isCopyShortcut = event.type == NSEventTypeKeyDown
+        && [key isEqualToString:@"c"]
+        && (flags & NSEventModifierFlagCommand) != 0
+        && (flags & (NSEventModifierFlagOption | NSEventModifierFlagControl)) == 0;
+
+    if (isCopyShortcut && [self copySelectionToGeneralPasteboard]) {
+        return YES;
+    }
+
+    return [super performKeyEquivalent:event];
+}
+
+- (void)copy:(id)sender {
+    (void)sender;
+    [self copySelectionToGeneralPasteboard];
+}
+
+- (BOOL)copySelectionToGeneralPasteboard {
+    if (!self.enabled || !self.selectable) {
+        return NO;
+    }
+
+    NSText *editor = self.currentEditor;
+    if (!editor || editor.selectedRange.length == 0) {
+        return NO;
+    }
+
+    NSString *source = editor.string ?: self.stringValue ?: @"";
+    NSRange selectedRange = editor.selectedRange;
+    if (NSMaxRange(selectedRange) > source.length) {
+        return NO;
+    }
+
+    NSString *selectedText = [source substringWithRange:selectedRange];
+    if (selectedText.length == 0) {
+        return NO;
+    }
+
+    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
+    [pasteboard clearContents];
+    return [pasteboard setString:selectedText forType:NSPasteboardTypeString];
+}
+
+@end
+
 @interface ReminderRowView ()
 @property (nonatomic, strong) ReminderItem *item;
 @end
@@ -17,7 +70,7 @@
         self.layer.cornerRadius = 4.0;
         self.translatesAutoresizingMaskIntoConstraints = NO;
 
-        NSTextField *label = [[NSTextField alloc] init];
+        NSTextField *label = [[ReminderRowTextField alloc] init];
         label.stringValue = item.content ?: @"";
         label.editable = NO;
         label.selectable = YES;

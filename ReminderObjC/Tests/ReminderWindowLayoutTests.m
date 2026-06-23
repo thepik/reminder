@@ -89,6 +89,19 @@ static void TestInputCommandVPastesClipboardText(void) {
     AssertTrue(saveButton.enabled, "pasted input must enable the save button");
 }
 
+static NSEvent *CommandKeyEvent(NSString *characters, unsigned short keyCode) {
+    return [NSEvent keyEventWithType:NSEventTypeKeyDown
+                            location:NSZeroPoint
+                       modifierFlags:NSEventModifierFlagCommand
+                           timestamp:0
+                        windowNumber:0
+                             context:nil
+                          characters:characters
+         charactersIgnoringModifiers:characters
+                           isARepeat:NO
+                             keyCode:keyCode];
+}
+
 static NSTextField *FindRowTextField(ReminderRowView *row) {
     for (NSView *subview in row.subviews) {
         if ([subview isKindOfClass:NSTextField.class]) {
@@ -115,12 +128,56 @@ static void TestRowTextIsSelectableButNotEditable(void) {
     AssertTrue(!textField.isEditable, "row text field must not edit saved item content");
 }
 
+static void TestRowTextCommandCCopiesSelectedText(void) {
+    [NSApplication sharedApplication];
+
+    ReminderItem *item = [[ReminderItem alloc] initWithItemID:@"row-1"
+                                                   categoryID:@"work"
+                                                      content:@"copy partial text"
+                                                    createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
+    ReminderCategory *category = [ReminderCategory.defaultCategories firstObject];
+    ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
+    row.translatesAutoresizingMaskIntoConstraints = YES;
+    row.frame = NSMakeRect(0, 0, 360, 44);
+
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 360, 80)
+                                                   styleMask:NSWindowStyleMaskTitled
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+    [window.contentView addSubview:row];
+
+    NSTextField *textField = FindRowTextField(row);
+    AssertTrue(textField != nil, "row must render item content in a text field before copy");
+
+    [window makeFirstResponder:textField];
+    [textField selectText:nil];
+    NSText *editor = textField.currentEditor;
+    AssertTrue(editor != nil, "row text field must create a field editor for selected text");
+    if (editor) {
+        editor.selectedRange = NSMakeRange(5, 7);
+    }
+
+    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
+    [pasteboard clearContents];
+    [pasteboard declareTypes:@[NSPasteboardTypeString] owner:nil];
+    AssertTrue([pasteboard setString:@"unchanged clipboard" forType:NSPasteboardTypeString], "test must seed clipboard before command-c");
+
+    BOOL handled = [textField performKeyEquivalent:CommandKeyEvent(@"c", 8)];
+
+    AssertTrue(handled, "row text field must handle command-c");
+    AssertEqualObjects([pasteboard stringForType:NSPasteboardTypeString], @"partial", "command-c must copy selected row text");
+
+    [row removeFromSuperview];
+    [window orderOut:nil];
+}
+
 int main(void) {
     @autoreleasepool {
         TestListDocumentViewUsesTopOrigin();
         TestInputPlaceholderUsesTwentyPointInsetAndVerticalCenter();
         TestInputCommandVPastesClipboardText();
         TestRowTextIsSelectableButNotEditable();
+        TestRowTextCommandCCopiesSelectedText();
 
         if (gFailures > 0) {
             NSLog(@"%lu layout test failure(s)", (unsigned long)gFailures);
