@@ -60,6 +60,7 @@ Note: in some sandboxed shell environments, `open` may fail even for system apps
 - Empty or whitespace-only input is ignored
 - Enter and `保存` both create an item
 - New items appear at the top of the current category
+- Row text supports selecting partial text with the mouse and copying the selection with `Command+C`
 - `工作` and `生活` rows show only `删除`
 - `快捷命令` rows show `复制` and `删除`
 - `复制` writes the full command to the system clipboard
