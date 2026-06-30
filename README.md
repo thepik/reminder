@@ -64,6 +64,8 @@ Note: in some sandboxed shell environments, `open` may fail even for system apps
 - `工作` and `生活` rows show only `删除`
 - `快捷命令` rows show `复制` and `删除`
 - `复制` writes the full command to the system clipboard
+- Successful quick-command copy shows a lightweight `已复制` toast
+- The quick-command `复制` button gives pressed text feedback
 - Closing the window hides it without quitting the app
 - Clicking the Dock icon restores the same window
 - Restarting the app reloads data from `~/Library/Application Support/Reminder/tasks.json`

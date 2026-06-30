@@ -111,6 +111,29 @@ static NSTextField *FindRowTextField(ReminderRowView *row) {
     return nil;
 }
 
+static NSButton *FindButtonWithTitle(NSView *view, NSString *title) {
+    for (NSView *subview in view.subviews) {
+        if ([subview isKindOfClass:NSButton.class]) {
+            NSButton *button = (NSButton *)subview;
+            if ([button.title isEqualToString:title]) {
+                return button;
+            }
+        }
+
+        NSButton *nestedButton = FindButtonWithTitle(subview, title);
+        if (nestedButton) {
+            return nestedButton;
+        }
+    }
+    return nil;
+}
+
+static NSColor *TitleColor(NSButton *button) {
+    return [button.attributedTitle attribute:NSForegroundColorAttributeName
+                                     atIndex:0
+                              effectiveRange:nil];
+}
+
 static void TestRowTextIsSelectableButNotEditable(void) {
     ReminderItem *item = [[ReminderItem alloc] initWithItemID:@"row-1"
                                                    categoryID:@"work"
@@ -171,6 +194,50 @@ static void TestRowTextCommandCCopiesSelectedText(void) {
     [window orderOut:nil];
 }
 
+static void TestQuickCommandCopyShowsSuccessToast(void) {
+    [NSApplication sharedApplication];
+
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:TemporaryStoreURL()];
+    [store switchToCategory:@"quickCommand"];
+    [store addItemWithContent:@"git status"];
+
+    ReminderWindowController *controller = [[ReminderWindowController alloc] initWithStore:store];
+    ReminderItem *item = [store.currentItems firstObject];
+
+    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
+    [pasteboard clearContents];
+
+    [controller performSelector:@selector(copyItem:) withObject:item];
+
+    NSTextField *toastLabel = [controller valueForKey:@"successToastLabel"];
+    AssertTrue(toastLabel != nil, "copy success must create a toast label");
+    AssertEqualObjects(toastLabel.stringValue, @"已复制", "copy success toast must use concise success text");
+    AssertTrue(!toastLabel.hidden, "copy success toast must be visible immediately");
+    AssertEqualObjects(NSStringFromClass(toastLabel.cell.class), @"ReminderToastTextFieldCell", "copy success toast must use a vertically centered text cell");
+    AssertEqualObjects([pasteboard stringForType:NSPasteboardTypeString], @"git status", "copy action must write the command to pasteboard");
+}
+
+static void TestQuickCommandCopyButtonHasPressedTextFeedback(void) {
+    ReminderItem *item = [[ReminderItem alloc] initWithItemID:@"row-1"
+                                                   categoryID:@"quickCommand"
+                                                      content:@"git status"
+                                                    createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
+    ReminderCategory *category = [ReminderCategory.defaultCategories lastObject];
+    ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
+    NSButton *copyButton = FindButtonWithTitle(row, @"复制");
+
+    AssertTrue(copyButton != nil, "quick command row must render a copy button before checking feedback");
+    NSColor *normalColor = TitleColor(copyButton);
+
+    [copyButton highlight:YES];
+    NSColor *pressedColor = TitleColor(copyButton);
+    [copyButton highlight:NO];
+    NSColor *restoredColor = TitleColor(copyButton);
+
+    AssertTrue(![pressedColor isEqual:normalColor], "copy button title color must change while pressed");
+    AssertEqualObjects(restoredColor, normalColor, "copy button title color must restore after press");
+}
+
 int main(void) {
     @autoreleasepool {
         TestListDocumentViewUsesTopOrigin();
@@ -178,6 +245,8 @@ int main(void) {
         TestInputCommandVPastesClipboardText();
         TestRowTextIsSelectableButNotEditable();
         TestRowTextCommandCCopiesSelectedText();
+        TestQuickCommandCopyShowsSuccessToast();
+        TestQuickCommandCopyButtonHasPressedTextFeedback();
 
         if (gFailures > 0) {
             NSLog(@"%lu layout test failure(s)", (unsigned long)gFailures);

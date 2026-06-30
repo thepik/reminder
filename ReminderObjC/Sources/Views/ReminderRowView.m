@@ -54,6 +54,20 @@
 
 @end
 
+@interface ReminderPressFeedbackButton : NSButton
+@property (nonatomic, strong) NSAttributedString *feedbackNormalTitle;
+@property (nonatomic, strong) NSAttributedString *feedbackPressedTitle;
+@end
+
+@implementation ReminderPressFeedbackButton
+
+- (void)highlight:(BOOL)flag {
+    [super highlight:flag];
+    self.attributedTitle = flag ? self.feedbackPressedTitle : self.feedbackNormalTitle;
+}
+
+@end
+
 @interface ReminderRowView ()
 @property (nonatomic, strong) ReminderItem *item;
 @end
@@ -95,6 +109,7 @@
         if ((category.rowActions & ReminderRowActionCopy) != 0) {
             copyButton = [self makeTextButton:@"复制"
                                         color:ReminderTheme.secondaryTextColor
+                                 pressedColor:ReminderTheme.accentColor
                                        action:@selector(copyPressed:)];
             [self addSubview:copyButton];
         }
@@ -125,11 +140,28 @@
 }
 
 - (NSButton *)makeTextButton:(NSString *)title color:(NSColor *)color action:(SEL)action {
-    NSButton *button = [NSButton buttonWithTitle:title target:self action:action];
+    return [self makeTextButton:title color:color pressedColor:nil action:action];
+}
+
+- (NSButton *)makeTextButton:(NSString *)title
+                       color:(NSColor *)color
+                pressedColor:(NSColor *)pressedColor
+                      action:(SEL)action {
+    NSButton *button = pressedColor
+        ? [ReminderPressFeedbackButton buttonWithTitle:title target:self action:action]
+        : [NSButton buttonWithTitle:title target:self action:action];
     button.bordered = NO;
-    button.attributedTitle = [ReminderTheme buttonTitle:title
-                                                  color:color
-                                                   font:[ReminderTheme regularFontOfSize:16]];
+    NSAttributedString *normalTitle = [ReminderTheme buttonTitle:title
+                                                           color:color
+                                                            font:[ReminderTheme regularFontOfSize:16]];
+    button.attributedTitle = normalTitle;
+    if (pressedColor && [button isKindOfClass:ReminderPressFeedbackButton.class]) {
+        ReminderPressFeedbackButton *feedbackButton = (ReminderPressFeedbackButton *)button;
+        feedbackButton.feedbackNormalTitle = normalTitle;
+        feedbackButton.feedbackPressedTitle = [ReminderTheme buttonTitle:title
+                                                                   color:pressedColor
+                                                                    font:[ReminderTheme mediumFontOfSize:16]];
+    }
     button.translatesAutoresizingMaskIntoConstraints = NO;
     return button;
 }

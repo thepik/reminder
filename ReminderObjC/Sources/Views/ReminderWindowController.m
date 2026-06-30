@@ -15,6 +15,31 @@
 
 @end
 
+@interface ReminderToastTextFieldCell : NSTextFieldCell
+@end
+
+@implementation ReminderToastTextFieldCell
+
+- (NSRect)drawingRectForBounds:(NSRect)rect {
+    NSRect drawingRect = [super drawingRectForBounds:rect];
+    NSSize textSize = [self.attributedStringValue boundingRectWithSize:NSMakeSize(NSWidth(rect), CGFLOAT_MAX)
+                                                               options:NSStringDrawingUsesLineFragmentOrigin].size;
+    CGFloat textHeight = ceil(textSize.height);
+    if (textHeight <= 0) {
+        textHeight = NSHeight(drawingRect);
+    }
+
+    drawingRect.origin.y = NSMinY(rect) + floor((NSHeight(rect) - textHeight) / 2.0);
+    drawingRect.size.height = textHeight;
+    return drawingRect;
+}
+
+- (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(NSView *)controlView {
+    [super drawInteriorWithFrame:[self drawingRectForBounds:cellFrame] inView:controlView];
+}
+
+@end
+
 @interface ReminderWindowController ()
 @property (nonatomic, strong) ReminderStore *store;
 @property (nonatomic, strong) CategoryTabView *tabView;
@@ -22,6 +47,8 @@
 @property (nonatomic, strong) NSView *documentView;
 @property (nonatomic, strong) NSStackView *stackView;
 @property (nonatomic, strong) InputBarView *inputBar;
+@property (nonatomic, strong) NSTextField *successToastLabel;
+@property (nonatomic, strong) NSTimer *successToastTimer;
 @end
 
 @implementation ReminderWindowController
@@ -157,8 +184,67 @@
 - (void)copyItem:(ReminderItem *)item {
     NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
     [pasteboard clearContents];
-    [pasteboard setString:item.content forType:NSPasteboardTypeString];
+    BOOL copied = [pasteboard setString:item.content forType:NSPasteboardTypeString];
+    if (copied) {
+        [self showCopyToast];
+    }
     [self.inputBar focusInput];
+}
+
+- (void)showCopyToast {
+    NSView *rootView = self.window.contentView;
+    if (!rootView) {
+        return;
+    }
+
+    if (!self.successToastLabel) {
+        self.successToastLabel = [self makeCopyToastLabel];
+        [rootView addSubview:self.successToastLabel positioned:NSWindowAbove relativeTo:nil];
+        [NSLayoutConstraint activateConstraints:@[
+            [self.successToastLabel.centerXAnchor constraintEqualToAnchor:rootView.centerXAnchor],
+            [self.successToastLabel.bottomAnchor constraintEqualToAnchor:self.inputBar.topAnchor constant:-12],
+            [self.successToastLabel.widthAnchor constraintGreaterThanOrEqualToConstant:88],
+            [self.successToastLabel.heightAnchor constraintEqualToConstant:30]
+        ]];
+    }
+
+    [self.successToastTimer invalidate];
+    self.successToastTimer = nil;
+    self.successToastLabel.hidden = NO;
+    self.successToastLabel.alphaValue = 1.0;
+    self.successToastTimer = [NSTimer scheduledTimerWithTimeInterval:1.2
+                                                              target:self
+                                                            selector:@selector(hideCopyToast:)
+                                                            userInfo:nil
+                                                             repeats:NO];
+}
+
+- (NSTextField *)makeCopyToastLabel {
+    NSTextField *label = [NSTextField labelWithString:@"已复制"];
+    label.cell = [[ReminderToastTextFieldCell alloc] initTextCell:@"已复制"];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.alignment = NSTextAlignmentCenter;
+    label.font = [ReminderTheme mediumFontOfSize:13];
+    label.textColor = NSColor.whiteColor;
+    label.wantsLayer = YES;
+    label.layer.backgroundColor = [NSColor colorWithSRGBRed:0.08
+                                                      green:0.09
+                                                       blue:0.11
+                                                      alpha:0.92].CGColor;
+    label.layer.cornerRadius = 15.0;
+    label.layer.masksToBounds = YES;
+    return label;
+}
+
+- (void)hideCopyToast:(NSTimer *)timer {
+    (void)timer;
+    self.successToastTimer = nil;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.18;
+        self.successToastLabel.animator.alphaValue = 0.0;
+    } completionHandler:^{
+        self.successToastLabel.hidden = YES;
+    }];
 }
 
 - (void)deleteItem:(ReminderItem *)item {
@@ -177,6 +263,10 @@
     [self.window makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
     [self.inputBar focusInput];
+}
+
+- (void)dealloc {
+    [self.successToastTimer invalidate];
 }
 
 @end
