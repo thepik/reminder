@@ -68,7 +68,7 @@
         BOOL selected = [category.identifier isEqualToString:self.selectedCategoryID];
         button.layer.backgroundColor = (selected ? ReminderTheme.accentColor : ReminderTheme.inactiveTabColor).CGColor;
         button.attributedTitle = [ReminderTheme buttonTitle:category.displayName
-                                                      color:NSColor.whiteColor
+                                                      color:ReminderTheme.primaryTextColor
                                                        font:[ReminderTheme mediumFontOfSize:13]];
     }
 }

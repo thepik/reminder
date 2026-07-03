@@ -72,7 +72,7 @@ static const CGFloat ReminderInputHorizontalInset = 20.0;
         _inputContainer = [[NSView alloc] init];
         _inputContainer.wantsLayer = YES;
         _inputContainer.layer.backgroundColor = ReminderTheme.backgroundColor.CGColor;
-        _inputContainer.layer.borderColor = ReminderTheme.accentColor.CGColor;
+        _inputContainer.layer.borderColor = ReminderTheme.inputBorderColor.CGColor;
         _inputContainer.layer.borderWidth = 1;
         _inputContainer.layer.cornerRadius = 8;
         _inputContainer.translatesAutoresizingMaskIntoConstraints = NO;
@@ -86,7 +86,7 @@ static const CGFloat ReminderInputHorizontalInset = 20.0;
         _textField.editable = YES;
         _textField.selectable = YES;
         _textField.font = [ReminderTheme mediumFontOfSize:16];
-        _textField.textColor = NSColor.whiteColor;
+        _textField.textColor = ReminderTheme.primaryTextColor;
         _textField.backgroundColor = NSColor.clearColor;
         _textField.drawsBackground = NO;
         _textField.bezeled = NO;
@@ -105,7 +105,7 @@ static const CGFloat ReminderInputHorizontalInset = 20.0;
         _saveButton.layer.cornerRadius = 22;
         _saveButton.layer.backgroundColor = ReminderTheme.accentColor.CGColor;
         _saveButton.attributedTitle = [ReminderTheme buttonTitle:@"保存"
-                                                           color:NSColor.whiteColor
+                                                           color:ReminderTheme.primaryTextColor
                                                             font:[ReminderTheme mediumFontOfSize:16]];
         _saveButton.translatesAutoresizingMaskIntoConstraints = NO;
         [self addSubview:_saveButton];

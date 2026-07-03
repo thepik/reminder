@@ -225,12 +225,9 @@
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.alignment = NSTextAlignmentCenter;
     label.font = [ReminderTheme mediumFontOfSize:13];
-    label.textColor = NSColor.whiteColor;
+    label.textColor = ReminderTheme.primaryTextColor;
     label.wantsLayer = YES;
-    label.layer.backgroundColor = [NSColor colorWithSRGBRed:0.08
-                                                      green:0.09
-                                                       blue:0.11
-                                                      alpha:0.92].CGColor;
+    label.layer.backgroundColor = ReminderTheme.toastBackgroundColor.CGColor;
     label.layer.cornerRadius = 15.0;
     label.layer.masksToBounds = YES;
     return label;

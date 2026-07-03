@@ -52,6 +52,20 @@ dist/Reminder.app
 - `ReminderObjC/Tests/`：基于 Foundation 的存储测试
 - `script/`：测试、构建、运行和 DMG 打包脚本
 
+## 配色
+
+应用采用“沉稳石墨灰”暗色方案，仅支持暗色模式。所有颜色集中在 `ReminderObjC/Sources/Theme/ReminderTheme.h/.m`，视图层不硬编码颜色，调色只需改 Theme 一处。
+
+| 用途 | 颜色 |
+| --- | --- |
+| 背景 | `#1E1E22` |
+| 列表行卡片 | `#2A2A30` |
+| 强调色（选中态、保存按钮） | `#5B8DEF` |
+| 主文字 | `#E8E8EC` |
+| 次要文字 / 复制按钮 | `#9A9AA2` |
+| 删除按钮 | `#E5484D` |
+| 输入框边框 | `#3A3A42` |
+
 ## 验收清单
 
 - 启动后打开一个标题为 `Reminder` 的窗口
