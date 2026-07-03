@@ -9,6 +9,9 @@
 + (NSColor *)placeholderColor;
 + (NSColor *)dangerColor;
 + (NSColor *)secondaryTextColor;
++ (NSColor *)primaryTextColor;
++ (NSColor *)toastBackgroundColor;
++ (NSColor *)inputBorderColor;
 + (NSFont *)regularFontOfSize:(CGFloat)size;
 + (NSFont *)mediumFontOfSize:(CGFloat)size;
 + (NSAttributedString *)buttonTitle:(NSString *)title color:(NSColor *)color font:(NSFont *)font;

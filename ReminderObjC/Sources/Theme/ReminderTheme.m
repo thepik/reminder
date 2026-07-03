@@ -10,31 +10,43 @@
 }
 
 + (NSColor *)backgroundColor {
-    return [self colorWithHex:0x24252F];
+    return [self colorWithHex:0x1E1E22];
 }
 
 + (NSColor *)cardColor {
-    return [self colorWithHex:0x272D31];
+    return [self colorWithHex:0x2A2A30];
 }
 
 + (NSColor *)accentColor {
-    return [self colorWithHex:0x4482F9];
+    return [self colorWithHex:0x5B8DEF];
 }
 
 + (NSColor *)inactiveTabColor {
-    return [self colorWithHex:0x292A35];
+    return [self colorWithHex:0x26262C];
 }
 
 + (NSColor *)placeholderColor {
-    return [self colorWithHex:0x848484];
+    return [self colorWithHex:0x6B6B73];
 }
 
 + (NSColor *)dangerColor {
-    return [self colorWithHex:0xB00000];
+    return [self colorWithHex:0xE5484D];
 }
 
 + (NSColor *)secondaryTextColor {
-    return [self colorWithHex:0xA3A3A5];
+    return [self colorWithHex:0x9A9AA2];
+}
+
++ (NSColor *)primaryTextColor {
+    return [self colorWithHex:0xE8E8EC];
+}
+
++ (NSColor *)inputBorderColor {
+    return [self colorWithHex:0x3A3A42];
+}
+
++ (NSColor *)toastBackgroundColor {
+    return [NSColor colorWithSRGBRed:0.109 green:0.109 blue:0.125 alpha:0.92];
 }
 
 + (NSFont *)regularFontOfSize:(CGFloat)size {

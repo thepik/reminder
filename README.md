@@ -52,6 +52,20 @@ Note: in some sandboxed shell environments, `open` may fail even for system apps
 - `ReminderObjC/Tests/`: Foundation-based store tests
 - `script/`: test, build, run, and DMG packaging scripts
 
+## Color
+
+The app uses a restrained graphite-gray dark scheme; light mode is not supported. All colors live in `ReminderObjC/Sources/Theme/ReminderTheme.h/.m` — views never hardcode colors, so retheming only touches Theme.
+
+| Role | Color |
+| --- | --- |
+| Background | `#1E1E22` |
+| Row card | `#2A2A30` |
+| Accent (selection, save button) | `#5B8DEF` |
+| Primary text | `#E8E8EC` |
+| Secondary text / copy button | `#9A9AA2` |
+| Delete button | `#E5484D` |
+| Input border | `#3A3A42` |
+
 ## Acceptance Checklist
 
 - Launch opens one window titled `Reminder`

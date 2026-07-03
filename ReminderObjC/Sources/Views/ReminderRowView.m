@@ -94,7 +94,7 @@
         label.drawsBackground = NO;
         label.focusRingType = NSFocusRingTypeNone;
         label.font = [ReminderTheme regularFontOfSize:16];
-        label.textColor = NSColor.whiteColor;
+        label.textColor = ReminderTheme.primaryTextColor;
         label.lineBreakMode = NSLineBreakByTruncatingTail;
         label.maximumNumberOfLines = 1;
         label.translatesAutoresizingMaskIntoConstraints = NO;
