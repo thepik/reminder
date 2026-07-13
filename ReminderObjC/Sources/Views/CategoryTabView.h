@@ -9,5 +9,6 @@ typedef void (^ReminderCategorySelectHandler)(NSString *categoryID);
 
 - (instancetype)initWithCategories:(NSArray<ReminderCategory *> *)categories;
 - (void)setSelectedCategoryID:(NSString *)categoryID;
+- (void)updateItemCounts:(NSDictionary<NSString *, NSNumber *> *)itemCounts;
 
 @end

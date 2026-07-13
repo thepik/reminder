@@ -8,5 +8,6 @@ typedef void (^ReminderInputSaveHandler)(NSString *text);
 
 - (void)focusInput;
 - (void)clearInput;
+- (void)setCategoryDisplayName:(NSString *)displayName;
 
 @end

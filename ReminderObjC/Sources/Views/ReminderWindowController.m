@@ -15,6 +15,57 @@
 
 @end
 
+@interface ReminderBackgroundView : NSView
+@end
+
+@implementation ReminderBackgroundView
+
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        self.wantsLayer = YES;
+        [self updateBackground];
+    }
+    return self;
+}
+
+- (void)viewDidChangeEffectiveAppearance {
+    [super viewDidChangeEffectiveAppearance];
+    [self updateBackground];
+}
+
+- (void)updateBackground {
+    self.layer.backgroundColor = ReminderTheme.backgroundColor.CGColor;
+}
+
+@end
+
+
+@interface ReminderSeparatorView : NSView
+@end
+
+@implementation ReminderSeparatorView
+
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        self.wantsLayer = YES;
+        [self updateSeparator];
+    }
+    return self;
+}
+
+- (void)viewDidChangeEffectiveAppearance {
+    [super viewDidChangeEffectiveAppearance];
+    [self updateSeparator];
+}
+
+- (void)updateSeparator {
+    self.layer.backgroundColor = ReminderTheme.separatorColor.CGColor;
+}
+
+@end
+
 @interface ReminderToastTextFieldCell : NSTextFieldCell
 @end
 
@@ -43,10 +94,15 @@
 @interface ReminderWindowController ()
 @property (nonatomic, strong) ReminderStore *store;
 @property (nonatomic, strong) CategoryTabView *tabView;
+@property (nonatomic, strong) NSView *mainView;
 @property (nonatomic, strong) NSScrollView *scrollView;
 @property (nonatomic, strong) NSView *documentView;
 @property (nonatomic, strong) NSStackView *stackView;
 @property (nonatomic, strong) InputBarView *inputBar;
+@property (nonatomic, strong) NSTextField *categoryTitleLabel;
+@property (nonatomic, strong) NSTextField *itemCountLabel;
+@property (nonatomic, strong) NSView *emptyStateView;
+@property (nonatomic, strong) NSTextField *emptyStateDescriptionLabel;
 @property (nonatomic, strong) NSTextField *successToastLabel;
 @property (nonatomic, strong) NSTimer *successToastTimer;
 @end
@@ -54,15 +110,19 @@
 @implementation ReminderWindowController
 
 - (instancetype)initWithStore:(ReminderStore *)store {
-    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 813, 686)
-                                                   styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable)
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 920, 680)
+                                                   styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable | NSWindowStyleMaskFullSizeContentView)
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
     self = [super initWithWindow:window];
     if (self) {
         _store = store;
-        window.title = @"Reminder";
-        window.minSize = NSMakeSize(480, 480);
+        window.title = @"备忘录";
+        window.titleVisibility = NSWindowTitleHidden;
+        window.titlebarAppearsTransparent = YES;
+        window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
+        window.movableByWindowBackground = YES;
+        window.minSize = NSMakeSize(700, 500);
         window.delegate = self;
         [self buildContent];
         [self reloadRows];
@@ -71,10 +131,19 @@
 }
 
 - (void)buildContent {
-    NSView *rootView = [[NSView alloc] init];
-    rootView.wantsLayer = YES;
-    rootView.layer.backgroundColor = ReminderTheme.backgroundColor.CGColor;
+    ReminderBackgroundView *rootView = [[ReminderBackgroundView alloc] init];
     self.window.contentView = rootView;
+
+    NSVisualEffectView *sidebarView = [[NSVisualEffectView alloc] init];
+    sidebarView.material = NSVisualEffectMaterialSidebar;
+    sidebarView.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+    sidebarView.state = NSVisualEffectStateFollowsWindowActiveState;
+    sidebarView.translatesAutoresizingMaskIntoConstraints = NO;
+    [rootView addSubview:sidebarView];
+
+    ReminderSeparatorView *sidebarSeparator = [[ReminderSeparatorView alloc] init];
+    sidebarSeparator.translatesAutoresizingMaskIntoConstraints = NO;
+    [rootView addSubview:sidebarSeparator];
 
     self.tabView = [[CategoryTabView alloc] initWithCategories:self.store.categories];
     self.tabView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -83,7 +152,27 @@
     self.tabView.onSelectCategory = ^(NSString *categoryID) {
         [weakSelf selectCategory:categoryID];
     };
-    [rootView addSubview:self.tabView];
+    [sidebarView addSubview:self.tabView];
+
+    self.mainView = [[NSView alloc] init];
+    self.mainView.translatesAutoresizingMaskIntoConstraints = NO;
+    [rootView addSubview:self.mainView];
+
+    self.categoryTitleLabel = [NSTextField labelWithString:@""];
+    self.categoryTitleLabel.font = [ReminderTheme semiboldFontOfSize:27];
+    self.categoryTitleLabel.textColor = ReminderTheme.primaryTextColor;
+    self.categoryTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.mainView addSubview:self.categoryTitleLabel];
+
+    self.itemCountLabel = [NSTextField labelWithString:@""];
+    self.itemCountLabel.font = [ReminderTheme regularFontOfSize:12];
+    self.itemCountLabel.textColor = ReminderTheme.tertiaryTextColor;
+    self.itemCountLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.mainView addSubview:self.itemCountLabel];
+
+    ReminderSeparatorView *headerSeparator = [[ReminderSeparatorView alloc] init];
+    headerSeparator.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.mainView addSubview:headerSeparator];
 
     self.scrollView = [[NSScrollView alloc] init];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -91,7 +180,8 @@
     self.scrollView.borderType = NSNoBorder;
     self.scrollView.hasVerticalScroller = YES;
     self.scrollView.autohidesScrollers = YES;
-    [rootView addSubview:self.scrollView];
+    self.scrollView.scrollerStyle = NSScrollerStyleOverlay;
+    [self.mainView addSubview:self.scrollView];
 
     self.documentView = [[ReminderFlippedView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
     self.documentView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -109,35 +199,114 @@
     self.inputBar.onSave = ^(NSString *text) {
         [weakSelf saveText:text];
     };
-    [rootView addSubview:self.inputBar];
+    [self.mainView addSubview:self.inputBar];
 
-    CGFloat tabWidth = self.store.categories.count * 76.0;
+    self.emptyStateView = [self makeEmptyStateView];
+    [self.mainView addSubview:self.emptyStateView];
+
     [NSLayoutConstraint activateConstraints:@[
-        [self.tabView.topAnchor constraintEqualToAnchor:rootView.topAnchor constant:28],
-        [self.tabView.centerXAnchor constraintEqualToAnchor:rootView.centerXAnchor],
-        [self.tabView.widthAnchor constraintEqualToConstant:tabWidth],
-        [self.tabView.heightAnchor constraintEqualToConstant:26],
+        [sidebarView.leadingAnchor constraintEqualToAnchor:rootView.leadingAnchor],
+        [sidebarView.topAnchor constraintEqualToAnchor:rootView.topAnchor],
+        [sidebarView.bottomAnchor constraintEqualToAnchor:rootView.bottomAnchor],
+        [sidebarView.widthAnchor constraintEqualToConstant:226],
 
-        [self.inputBar.leadingAnchor constraintEqualToAnchor:rootView.leadingAnchor constant:40],
-        [self.inputBar.trailingAnchor constraintEqualToAnchor:rootView.trailingAnchor constant:-40],
-        [self.inputBar.bottomAnchor constraintEqualToAnchor:rootView.bottomAnchor constant:-32],
-        [self.inputBar.heightAnchor constraintEqualToConstant:44],
+        [self.tabView.leadingAnchor constraintEqualToAnchor:sidebarView.leadingAnchor],
+        [self.tabView.trailingAnchor constraintEqualToAnchor:sidebarView.trailingAnchor],
+        [self.tabView.topAnchor constraintEqualToAnchor:sidebarView.topAnchor],
+        [self.tabView.bottomAnchor constraintEqualToAnchor:sidebarView.bottomAnchor],
 
-        [self.scrollView.topAnchor constraintEqualToAnchor:self.tabView.bottomAnchor constant:24],
-        [self.scrollView.leadingAnchor constraintEqualToAnchor:rootView.leadingAnchor constant:40],
-        [self.scrollView.trailingAnchor constraintEqualToAnchor:rootView.trailingAnchor constant:-40],
-        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.inputBar.topAnchor constant:-24],
+        [sidebarSeparator.leadingAnchor constraintEqualToAnchor:sidebarView.trailingAnchor],
+        [sidebarSeparator.topAnchor constraintEqualToAnchor:rootView.topAnchor],
+        [sidebarSeparator.bottomAnchor constraintEqualToAnchor:rootView.bottomAnchor],
+        [sidebarSeparator.widthAnchor constraintEqualToConstant:1],
+
+        [self.mainView.leadingAnchor constraintEqualToAnchor:sidebarSeparator.trailingAnchor],
+        [self.mainView.trailingAnchor constraintEqualToAnchor:rootView.trailingAnchor],
+        [self.mainView.topAnchor constraintEqualToAnchor:rootView.topAnchor],
+        [self.mainView.bottomAnchor constraintEqualToAnchor:rootView.bottomAnchor],
+
+        [self.categoryTitleLabel.topAnchor constraintEqualToAnchor:self.mainView.topAnchor constant:48],
+        [self.categoryTitleLabel.leadingAnchor constraintEqualToAnchor:self.mainView.leadingAnchor constant:24],
+        [self.categoryTitleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.itemCountLabel.leadingAnchor constant:-16],
+
+        [self.itemCountLabel.trailingAnchor constraintEqualToAnchor:self.mainView.trailingAnchor constant:-25],
+        [self.itemCountLabel.firstBaselineAnchor constraintEqualToAnchor:self.categoryTitleLabel.firstBaselineAnchor],
+
+        [headerSeparator.topAnchor constraintEqualToAnchor:self.categoryTitleLabel.bottomAnchor constant:17],
+        [headerSeparator.leadingAnchor constraintEqualToAnchor:self.mainView.leadingAnchor],
+        [headerSeparator.trailingAnchor constraintEqualToAnchor:self.mainView.trailingAnchor],
+        [headerSeparator.heightAnchor constraintEqualToConstant:1],
+
+        [self.inputBar.leadingAnchor constraintEqualToAnchor:self.mainView.leadingAnchor constant:24],
+        [self.inputBar.trailingAnchor constraintEqualToAnchor:self.mainView.trailingAnchor constant:-24],
+        [self.inputBar.bottomAnchor constraintEqualToAnchor:self.mainView.bottomAnchor constant:-22],
+        [self.inputBar.heightAnchor constraintEqualToConstant:50],
+
+        [self.scrollView.topAnchor constraintEqualToAnchor:headerSeparator.bottomAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.mainView.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.mainView.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.inputBar.topAnchor constant:-17],
 
         [self.documentView.leadingAnchor constraintEqualToAnchor:self.scrollView.contentView.leadingAnchor],
         [self.documentView.trailingAnchor constraintEqualToAnchor:self.scrollView.contentView.trailingAnchor],
         [self.documentView.topAnchor constraintEqualToAnchor:self.scrollView.contentView.topAnchor],
         [self.documentView.widthAnchor constraintEqualToAnchor:self.scrollView.contentView.widthAnchor],
+        [self.documentView.heightAnchor constraintGreaterThanOrEqualToAnchor:self.scrollView.contentView.heightAnchor],
 
-        [self.stackView.leadingAnchor constraintEqualToAnchor:self.documentView.leadingAnchor],
-        [self.stackView.trailingAnchor constraintEqualToAnchor:self.documentView.trailingAnchor],
-        [self.stackView.topAnchor constraintEqualToAnchor:self.documentView.topAnchor constant:2],
-        [self.stackView.bottomAnchor constraintLessThanOrEqualToAnchor:self.documentView.bottomAnchor]
+        [self.stackView.leadingAnchor constraintEqualToAnchor:self.documentView.leadingAnchor constant:24],
+        [self.stackView.trailingAnchor constraintEqualToAnchor:self.documentView.trailingAnchor constant:-24],
+        [self.stackView.topAnchor constraintEqualToAnchor:self.documentView.topAnchor constant:16],
+        [self.stackView.bottomAnchor constraintLessThanOrEqualToAnchor:self.documentView.bottomAnchor constant:-16],
+
+        [self.emptyStateView.centerXAnchor constraintEqualToAnchor:self.scrollView.centerXAnchor],
+        [self.emptyStateView.centerYAnchor constraintEqualToAnchor:self.scrollView.centerYAnchor constant:-6],
+        [self.emptyStateView.widthAnchor constraintLessThanOrEqualToAnchor:self.scrollView.widthAnchor constant:-48]
     ]];
+}
+
+- (NSView *)makeEmptyStateView {
+    NSView *emptyView = [[NSView alloc] init];
+    emptyView.translatesAutoresizingMaskIntoConstraints = NO;
+
+    NSImageView *imageView = [[NSImageView alloc] init];
+    NSImage *image = [NSImage imageWithSystemSymbolName:@"note.text" accessibilityDescription:@"空列表"];
+    NSImageSymbolConfiguration *configuration = [NSImageSymbolConfiguration configurationWithPointSize:34
+                                                                                                  weight:NSFontWeightRegular
+                                                                                                   scale:NSImageSymbolScaleMedium];
+    imageView.image = [image imageWithSymbolConfiguration:configuration];
+    imageView.contentTintColor = ReminderTheme.tertiaryTextColor;
+    imageView.translatesAutoresizingMaskIntoConstraints = NO;
+    [emptyView addSubview:imageView];
+
+    NSTextField *titleLabel = [NSTextField labelWithString:@"这里还没有内容"];
+    titleLabel.font = [ReminderTheme semiboldFontOfSize:16];
+    titleLabel.textColor = ReminderTheme.secondaryTextColor;
+    titleLabel.alignment = NSTextAlignmentCenter;
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [emptyView addSubview:titleLabel];
+
+    self.emptyStateDescriptionLabel = [NSTextField labelWithString:@"在下方输入后按 Return 保存。"];
+    self.emptyStateDescriptionLabel.font = [ReminderTheme regularFontOfSize:13];
+    self.emptyStateDescriptionLabel.textColor = ReminderTheme.tertiaryTextColor;
+    self.emptyStateDescriptionLabel.alignment = NSTextAlignmentCenter;
+    self.emptyStateDescriptionLabel.maximumNumberOfLines = 2;
+    self.emptyStateDescriptionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [emptyView addSubview:self.emptyStateDescriptionLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [imageView.topAnchor constraintEqualToAnchor:emptyView.topAnchor],
+        [imageView.centerXAnchor constraintEqualToAnchor:emptyView.centerXAnchor],
+        [imageView.widthAnchor constraintEqualToConstant:40],
+        [imageView.heightAnchor constraintEqualToConstant:40],
+        [titleLabel.topAnchor constraintEqualToAnchor:imageView.bottomAnchor constant:12],
+        [titleLabel.leadingAnchor constraintEqualToAnchor:emptyView.leadingAnchor],
+        [titleLabel.trailingAnchor constraintEqualToAnchor:emptyView.trailingAnchor],
+        [self.emptyStateDescriptionLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:6],
+        [self.emptyStateDescriptionLabel.leadingAnchor constraintEqualToAnchor:emptyView.leadingAnchor],
+        [self.emptyStateDescriptionLabel.trailingAnchor constraintEqualToAnchor:emptyView.trailingAnchor],
+        [self.emptyStateDescriptionLabel.bottomAnchor constraintEqualToAnchor:emptyView.bottomAnchor]
+    ]];
+    return emptyView;
 }
 
 - (void)selectCategory:(NSString *)categoryID {
@@ -146,6 +315,8 @@
     }
     [self.tabView setSelectedCategoryID:self.store.currentCategoryID];
     [self reloadRows];
+    [self.scrollView.contentView scrollToPoint:NSZeroPoint];
+    [self.scrollView reflectScrolledClipView:self.scrollView.contentView];
     [self.inputBar focusInput];
 }
 
@@ -155,11 +326,17 @@
         [self reloadRows];
         [self.scrollView.contentView scrollToPoint:NSZeroPoint];
         [self.scrollView reflectScrolledClipView:self.scrollView.contentView];
+        [self showToastWithText:@"已保存"];
     }
     [self.inputBar focusInput];
 }
 
 - (void)reloadRows {
+    BOOL shouldAnimate = self.window.isVisible;
+    if (shouldAnimate) {
+        self.stackView.alphaValue = 0.0;
+    }
+
     NSArray *arrangedSubviews = [self.stackView.arrangedSubviews copy];
     for (NSView *view in arrangedSubviews) {
         [self.stackView removeArrangedSubview:view];
@@ -179,6 +356,35 @@
         [self.stackView addArrangedSubview:row];
         [row.widthAnchor constraintEqualToAnchor:self.stackView.widthAnchor].active = YES;
     }
+
+    [self updateContentSummary];
+
+    if (shouldAnimate) {
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+            context.duration = 0.16;
+            self.stackView.animator.alphaValue = 1.0;
+        } completionHandler:nil];
+    } else {
+        self.stackView.alphaValue = 1.0;
+    }
+}
+
+- (void)updateContentSummary {
+    ReminderCategory *category = [self.store categoryForIdentifier:self.store.currentCategoryID];
+    NSUInteger itemCount = self.store.currentItems.count;
+    self.categoryTitleLabel.stringValue = category.displayName ?: @"";
+    self.itemCountLabel.stringValue = [NSString stringWithFormat:@"%lu 条备忘", (unsigned long)itemCount];
+    self.emptyStateView.hidden = itemCount > 0;
+    self.emptyStateDescriptionLabel.stringValue = [category.identifier isEqualToString:@"quickCommand"]
+        ? @"保存常用命令，之后可以一键复制。"
+        : @"在下方输入后按 Return 保存。";
+    [self.inputBar setCategoryDisplayName:category.displayName];
+
+    NSMutableDictionary<NSString *, NSNumber *> *counts = [NSMutableDictionary dictionary];
+    for (ReminderCategory *knownCategory in self.store.categories) {
+        counts[knownCategory.identifier] = @([self.store itemsForCategory:knownCategory.identifier].count);
+    }
+    [self.tabView updateItemCounts:counts];
 }
 
 - (void)copyItem:(ReminderItem *)item {
@@ -186,23 +392,29 @@
     [pasteboard clearContents];
     BOOL copied = [pasteboard setString:item.content forType:NSPasteboardTypeString];
     if (copied) {
-        [self showCopyToast];
+        [self showToastWithText:@"已复制"];
+    } else {
+        [self showToastWithText:@"复制失败"];
     }
     [self.inputBar focusInput];
 }
 
 - (void)showCopyToast {
+    [self showToastWithText:@"已复制"];
+}
+
+- (void)showToastWithText:(NSString *)text {
     NSView *rootView = self.window.contentView;
     if (!rootView) {
         return;
     }
 
     if (!self.successToastLabel) {
-        self.successToastLabel = [self makeCopyToastLabel];
+        self.successToastLabel = [self makeToastLabel];
         [rootView addSubview:self.successToastLabel positioned:NSWindowAbove relativeTo:nil];
         [NSLayoutConstraint activateConstraints:@[
-            [self.successToastLabel.centerXAnchor constraintEqualToAnchor:rootView.centerXAnchor],
-            [self.successToastLabel.bottomAnchor constraintEqualToAnchor:self.inputBar.topAnchor constant:-12],
+            [self.successToastLabel.centerXAnchor constraintEqualToAnchor:self.mainView.centerXAnchor],
+            [self.successToastLabel.bottomAnchor constraintEqualToAnchor:self.inputBar.topAnchor constant:-10],
             [self.successToastLabel.widthAnchor constraintGreaterThanOrEqualToConstant:88],
             [self.successToastLabel.heightAnchor constraintEqualToConstant:30]
         ]];
@@ -210,22 +422,33 @@
 
     [self.successToastTimer invalidate];
     self.successToastTimer = nil;
+    self.successToastLabel.stringValue = text;
     self.successToastLabel.hidden = NO;
-    self.successToastLabel.alphaValue = 1.0;
-    self.successToastTimer = [NSTimer scheduledTimerWithTimeInterval:1.2
+    self.successToastLabel.alphaValue = 0.0;
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.14;
+        self.successToastLabel.animator.alphaValue = 1.0;
+    } completionHandler:nil];
+    NSAccessibilityPostNotificationWithUserInfo(self.successToastLabel,
+                                                NSAccessibilityAnnouncementRequestedNotification,
+                                                @{
+        NSAccessibilityAnnouncementKey: text,
+        NSAccessibilityPriorityKey: @(NSAccessibilityPriorityMedium)
+    });
+    self.successToastTimer = [NSTimer scheduledTimerWithTimeInterval:1.35
                                                               target:self
                                                             selector:@selector(hideCopyToast:)
                                                             userInfo:nil
                                                              repeats:NO];
 }
 
-- (NSTextField *)makeCopyToastLabel {
+- (NSTextField *)makeToastLabel {
     NSTextField *label = [NSTextField labelWithString:@"已复制"];
     label.cell = [[ReminderToastTextFieldCell alloc] initTextCell:@"已复制"];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.alignment = NSTextAlignmentCenter;
-    label.font = [ReminderTheme mediumFontOfSize:13];
-    label.textColor = ReminderTheme.primaryTextColor;
+    label.font = [ReminderTheme semiboldFontOfSize:12];
+    label.textColor = NSColor.whiteColor;
     label.wantsLayer = YES;
     label.layer.backgroundColor = ReminderTheme.toastBackgroundColor.CGColor;
     label.layer.cornerRadius = 15.0;
@@ -247,6 +470,7 @@
 - (void)deleteItem:(ReminderItem *)item {
     [self.store deleteItemWithID:item.itemID categoryID:item.categoryID];
     [self reloadRows];
+    [self showToastWithText:@"已删除"];
     [self.inputBar focusInput];
 }
 

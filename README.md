@@ -47,30 +47,26 @@ Note: in some sandboxed shell environments, `open` may fail even for system apps
 - `ReminderObjC/Sources/AppDelegate.*`: lifecycle, close-to-hide, Dock reopen, final disk flush
 - `ReminderObjC/Sources/Models/`: category and item models
 - `ReminderObjC/Sources/Store/`: JSON persistence and schema migration
-- `ReminderObjC/Sources/Views/`: window, tab, row, and input views
+- `ReminderObjC/Sources/Views/`: two-column window, sidebar, row, and composer views
 - `ReminderObjC/Sources/Theme/`: shared colors, fonts, and button title helpers
 - `ReminderObjC/Tests/`: Foundation-based store tests
 - `script/`: test, build, run, and DMG packaging scripts
 
-## Color
+## Interface
 
-The app uses a restrained graphite-gray dark scheme; light mode is not supported. All colors live in `ReminderObjC/Sources/Theme/ReminderTheme.h/.m` — views never hardcode colors, so retheming only touches Theme.
+The interface follows the visual language of macOS Notes: an integrated titlebar, material sidebar, folder counts, a clear content header, paper-like rows, timestamps, an empty state, and a compact composer. It automatically follows the system's light or dark appearance.
 
-| Role | Color |
-| --- | --- |
-| Background | `#1E1E22` |
-| Row card | `#2A2A30` |
-| Accent (selection, save button) | `#5B8DEF` |
-| Primary text | `#E8E8EC` |
-| Secondary text / copy button | `#9A9AA2` |
-| Delete button | `#E5484D` |
-| Input border | `#3A3A42` |
+All reusable colors and typography live in `ReminderObjC/Sources/Theme/ReminderTheme.h/.m`. The primary accent uses Notes-style yellow (`#FFCC00` in light mode and `#FFD60A` in dark mode), while text, surfaces, borders, hover states, and focus feedback use dynamic theme tokens.
+
+Controls provide disabled, hover, pressed, focused, selected, success, and destructive feedback. Buttons and fields also expose accessible labels, values, help text, and tooltips.
 
 ## Acceptance Checklist
 
-- Launch opens one window titled `Reminder`
+- Launch opens one integrated two-column window titled `备忘录`
 - Default category is `工作`
-- Tabs show `工作` / `生活` / `快捷命令`
+- The sidebar shows `工作` / `生活` / `快捷命令` with live item counts
+- The content header shows the active category and item count
+- Empty categories show an explanatory empty state
 - Empty or whitespace-only input is ignored
 - Enter and `保存` both create an item
 - New items appear at the top of the current category
@@ -79,7 +75,8 @@ The app uses a restrained graphite-gray dark scheme; light mode is not supported
 - `快捷命令` rows show `复制` and `删除`
 - `复制` writes the full command to the system clipboard
 - Successful quick-command copy shows a lightweight `已复制` toast
-- The quick-command `复制` button gives pressed text feedback
+- Save, delete, and copy actions provide concise toast feedback
+- Sidebar rows, list rows, action buttons, the composer, and the save button provide hover / pressed / focus feedback
 - Closing the window hides it without quitting the app
 - Clicking the Dock icon restores the same window
 - Restarting the app reloads data from `~/Library/Application Support/Reminder/tasks.json`

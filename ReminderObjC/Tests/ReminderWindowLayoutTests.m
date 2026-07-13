@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <math.h>
 #import "../Sources/Store/ReminderStore.h"
+#import "../Sources/Theme/ReminderTheme.h"
 #import "../Sources/Views/InputBarView.h"
 #import "../Sources/Views/ReminderRowView.h"
 #import "../Sources/Views/ReminderWindowController.h"
@@ -128,6 +129,23 @@ static NSButton *FindButtonWithTitle(NSView *view, NSString *title) {
     return nil;
 }
 
+static NSTextField *FindTextFieldWithString(NSView *view, NSString *string) {
+    for (NSView *subview in view.subviews) {
+        if ([subview isKindOfClass:NSTextField.class]) {
+            NSTextField *textField = (NSTextField *)subview;
+            if ([textField.stringValue isEqualToString:string]) {
+                return textField;
+            }
+        }
+
+        NSTextField *nestedTextField = FindTextFieldWithString(subview, string);
+        if (nestedTextField) {
+            return nestedTextField;
+        }
+    }
+    return nil;
+}
+
 static NSColor *TitleColor(NSButton *button) {
     return [button.attributedTitle attribute:NSForegroundColorAttributeName
                                      atIndex:0
@@ -238,6 +256,116 @@ static void TestQuickCommandCopyButtonHasPressedTextFeedback(void) {
     AssertEqualObjects(restoredColor, normalColor, "copy button title color must restore after press");
 }
 
+static void TestNotesStyleWindowAndEmptyState(void) {
+    [NSApplication sharedApplication];
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:TemporaryStoreURL()];
+    ReminderWindowController *controller = [[ReminderWindowController alloc] initWithStore:store];
+
+    NSTextField *categoryTitle = [controller valueForKey:@"categoryTitleLabel"];
+    NSTextField *itemCount = [controller valueForKey:@"itemCountLabel"];
+    NSView *emptyState = [controller valueForKey:@"emptyStateView"];
+    InputBarView *inputBar = [controller valueForKey:@"inputBar"];
+    NSTextField *textField = [inputBar valueForKey:@"textField"];
+
+    AssertTrue((controller.window.styleMask & NSWindowStyleMaskFullSizeContentView) != 0,
+               "notes-style window must extend content into the titlebar");
+    AssertTrue(controller.window.titleVisibility == NSWindowTitleHidden,
+               "notes-style window must use a visually integrated titlebar");
+    AssertTrue(controller.window.minSize.width >= 700.0,
+               "two-column layout must keep a usable minimum width");
+    AssertEqualObjects(categoryTitle.stringValue, @"工作", "main header must show the active folder");
+    AssertEqualObjects(itemCount.stringValue, @"0 条备忘", "main header must show the empty item count");
+    AssertTrue(!emptyState.hidden, "empty folder must show an empty-state explanation");
+    AssertTrue([textField.placeholderAttributedString.string containsString:@"工作"],
+               "composer placeholder must identify the active folder");
+}
+
+static void TestSaveAndDeleteUpdateSummaryAndFeedback(void) {
+    [NSApplication sharedApplication];
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:TemporaryStoreURL()];
+    ReminderWindowController *controller = [[ReminderWindowController alloc] initWithStore:store];
+
+    [controller performSelector:@selector(saveText:) withObject:@"new note"];
+
+    NSTextField *itemCount = [controller valueForKey:@"itemCountLabel"];
+    NSView *emptyState = [controller valueForKey:@"emptyStateView"];
+    NSTextField *toastLabel = [controller valueForKey:@"successToastLabel"];
+    AssertEqualObjects(itemCount.stringValue, @"1 条备忘", "saving must refresh the visible count");
+    AssertTrue(emptyState.hidden, "saving the first item must hide the empty state");
+    AssertEqualObjects(toastLabel.stringValue, @"已保存", "saving must provide concise success feedback");
+
+    ReminderItem *item = store.currentItems.firstObject;
+    [controller performSelector:@selector(deleteItem:) withObject:item];
+
+    AssertEqualObjects(itemCount.stringValue, @"0 条备忘", "deleting must refresh the visible count");
+    AssertTrue(!emptyState.hidden, "deleting the last item must restore the empty state");
+    AssertEqualObjects(toastLabel.stringValue, @"已删除", "deleting must provide concise feedback");
+}
+
+static void TestRowsUseNotesStyleHeightAndCommandTypography(void) {
+    ReminderItem *item = [[ReminderItem alloc] initWithItemID:@"row-1"
+                                                   categoryID:@"quickCommand"
+                                                      content:@"git status"
+                                                    createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
+    ReminderCategory *category = [ReminderCategory.defaultCategories lastObject];
+    ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
+    NSTextField *textField = FindRowTextField(row);
+
+    BOOL hasExpectedHeight = NO;
+    for (NSLayoutConstraint *constraint in row.constraints) {
+        if (constraint.firstItem == row &&
+            constraint.firstAttribute == NSLayoutAttributeHeight &&
+            fabs(constraint.constant - 66.0) <= 0.5) {
+            hasExpectedHeight = YES;
+            break;
+        }
+    }
+
+    AssertTrue(hasExpectedHeight, "notes-style row must use a 66px two-line layout");
+    AssertTrue(textField.font.isFixedPitch, "quick command content must use readable monospaced typography");
+}
+
+static void TestThemeFollowsLightAndDarkAppearance(void) {
+    NSAppearance *lightAppearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+    NSAppearance *darkAppearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+    __block NSColor *lightBackground = nil;
+    __block NSColor *darkBackground = nil;
+
+    [lightAppearance performAsCurrentDrawingAppearance:^{
+        lightBackground = [ReminderTheme.backgroundColor colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    }];
+    [darkAppearance performAsCurrentDrawingAppearance:^{
+        darkBackground = [ReminderTheme.backgroundColor colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    }];
+
+    AssertTrue(lightBackground != nil && darkBackground != nil,
+               "theme colors must resolve in both system appearances");
+    AssertTrue(![lightBackground isEqual:darkBackground],
+               "theme background must adapt between light and dark appearance");
+}
+
+static void TestSidebarUsesFullWidthAlignment(void) {
+    [NSApplication sharedApplication];
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:TemporaryStoreURL()];
+    ReminderWindowController *controller = [[ReminderWindowController alloc] initWithStore:store];
+    [controller.window.contentView layoutSubtreeIfNeeded];
+
+    NSView *tabView = [controller valueForKey:@"tabView"];
+    NSDictionary *buttons = [tabView valueForKey:@"buttonsByCategory"];
+    NSButton *workButton = buttons[@"work"];
+    NSTextField *titleLabel = [workButton valueForKey:@"titleLabel"];
+    NSTextField *countLabel = [workButton valueForKey:@"countLabel"];
+    NSTextField *appTitle = FindTextFieldWithString(tabView, @"Reminder");
+
+    AssertTrue(appTitle != nil, "sidebar app title must use Reminder");
+    AssertTrue(fabs(NSWidth(workButton.frame) - (NSWidth(tabView.bounds) - 20.0)) <= 0.5,
+               "sidebar rows must fill the available width");
+    AssertTrue(titleLabel.alignment == NSTextAlignmentLeft || titleLabel.alignment == NSTextAlignmentNatural,
+               "sidebar icon and title group must align left");
+    AssertTrue(countLabel.alignment == NSTextAlignmentRight,
+               "sidebar live count must align right");
+}
+
 int main(void) {
     @autoreleasepool {
         TestListDocumentViewUsesTopOrigin();
@@ -247,6 +375,11 @@ int main(void) {
         TestRowTextCommandCCopiesSelectedText();
         TestQuickCommandCopyShowsSuccessToast();
         TestQuickCommandCopyButtonHasPressedTextFeedback();
+        TestNotesStyleWindowAndEmptyState();
+        TestSaveAndDeleteUpdateSummaryAndFeedback();
+        TestRowsUseNotesStyleHeightAndCommandTypography();
+        TestThemeFollowsLightAndDarkAppearance();
+        TestSidebarUsesFullWidthAlignment();
 
         if (gFailures > 0) {
             NSLog(@"%lu layout test failure(s)", (unsigned long)gFailures);
