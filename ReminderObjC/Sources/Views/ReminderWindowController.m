@@ -110,7 +110,7 @@
 @implementation ReminderWindowController
 
 - (instancetype)initWithStore:(ReminderStore *)store {
-    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 920, 680)
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 1280, 800)
                                                    styleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable | NSWindowStyleMaskFullSizeContentView)
                                                      backing:NSBackingStoreBuffered
                                                        defer:NO];
@@ -240,7 +240,7 @@
         [self.inputBar.leadingAnchor constraintEqualToAnchor:self.mainView.leadingAnchor constant:24],
         [self.inputBar.trailingAnchor constraintEqualToAnchor:self.mainView.trailingAnchor constant:-24],
         [self.inputBar.bottomAnchor constraintEqualToAnchor:self.mainView.bottomAnchor constant:-22],
-        [self.inputBar.heightAnchor constraintEqualToConstant:50],
+        [self.inputBar.heightAnchor constraintGreaterThanOrEqualToConstant:50],
 
         [self.scrollView.topAnchor constraintEqualToAnchor:headerSeparator.bottomAnchor],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.mainView.leadingAnchor],

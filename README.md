@@ -56,26 +56,31 @@ Note: in some sandboxed shell environments, `open` may fail even for system apps
 
 The interface follows the visual language of macOS Notes: an integrated titlebar, material sidebar, folder counts, a clear content header, paper-like rows, timestamps, an empty state, and a compact composer. It automatically follows the system's light or dark appearance.
 
+The default window opens at 1280 × 800 (minimum 700 × 500). List rows and the composer wrap long content instead of truncating it: content wraps onto additional lines, the row / composer grows with it up to three lines, and anything beyond three lines scrolls inside its own box. Wheel events over row text fall through to the list scroller unless the row itself is scrolling.
+
 All reusable colors and typography live in `ReminderObjC/Sources/Theme/ReminderTheme.h/.m`. The primary accent uses Notes-style yellow (`#FFCC00` in light mode and `#FFD60A` in dark mode), while text, surfaces, borders, hover states, and focus feedback use dynamic theme tokens.
 
 Controls provide disabled, hover, pressed, focused, selected, success, and destructive feedback. Buttons and fields also expose accessible labels, values, help text, and tooltips.
 
 ## Acceptance Checklist
 
-- Launch opens one integrated two-column window titled `备忘录`
+- Launch opens one integrated two-column window titled `备忘录` (default 1280 × 800)
 - Default category is `工作`
 - The sidebar shows `工作` / `生活` / `快捷命令` with live item counts
 - The content header shows the active category and item count
 - Empty categories show an explanatory empty state
 - Empty or whitespace-only input is ignored
-- Enter and `保存` both create an item
+- Enter and `保存` both create an item (use Shift+Enter to insert a newline)
 - New items appear at the top of the current category
+- Long input wraps to up to three lines, growing the composer; beyond three lines the composer scrolls internally and returns to one line after saving
+- Long saved content wraps to up to three lines, growing its row; beyond three lines the row scrolls internally
 - Row text supports selecting partial text with the mouse and copying the selection with `Command+C`
 - `工作` and `生活` rows show only `删除`
 - `快捷命令` rows show `复制` and `删除`
 - `复制` writes the full command to the system clipboard
 - Successful quick-command copy shows a lightweight `已复制` toast
 - Save, delete, and copy actions provide concise toast feedback
+- Wheel events over row text fall through to the list scroller unless the row itself is scrolling
 - Sidebar rows, list rows, action buttons, the composer, and the save button provide hover / pressed / focus feedback
 - Closing the window hides it without quitting the app
 - Clicking the Dock icon restores the same window

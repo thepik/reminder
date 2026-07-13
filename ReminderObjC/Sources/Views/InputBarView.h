@@ -2,7 +2,7 @@
 
 typedef void (^ReminderInputSaveHandler)(NSString *text);
 
-@interface InputBarView : NSView <NSTextFieldDelegate>
+@interface InputBarView : NSView <NSTextViewDelegate>
 
 @property (nonatomic, copy) ReminderInputSaveHandler onSave;
 

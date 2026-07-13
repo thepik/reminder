@@ -26,6 +26,19 @@ static NSUInteger gFailures = 0;
         } \
     } while (0)
 
+@interface ReminderRecordingScrollView : NSScrollView
+@property (nonatomic) NSUInteger receivedScrollWheelEvents;
+@end
+
+@implementation ReminderRecordingScrollView
+
+- (void)scrollWheel:(NSEvent *)event {
+    (void)event;
+    self.receivedScrollWheelEvents += 1;
+}
+
+@end
+
 static NSURL *TemporaryStoreURL(void) {
     NSString *name = [[NSUUID UUID].UUIDString stringByAppendingPathExtension:@"json"];
     return [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:name]];
@@ -48,14 +61,12 @@ static void TestInputPlaceholderUsesTwentyPointInsetAndVerticalCenter(void) {
     inputBar.translatesAutoresizingMaskIntoConstraints = YES;
     [inputBar layoutSubtreeIfNeeded];
 
-    NSTextField *textField = [inputBar valueForKey:@"textField"];
-    NSView *fieldParent = textField.superview;
-    NSRect fieldFrame = textField.frame;
-    NSRect drawingRect = [textField.cell drawingRectForBounds:textField.bounds];
-    CGFloat textStartX = NSMinX(fieldFrame) + NSMinX(drawingRect);
-    CGFloat textMidY = NSMinY(fieldFrame) + NSMidY(drawingRect);
+    NSTextView *textField = [inputBar valueForKey:@"textField"];
+    NSScrollView *textScrollView = [inputBar valueForKey:@"textScrollView"];
+    NSView *fieldParent = textScrollView.superview;
+    CGFloat textStartX = NSMinX(textScrollView.frame) + textField.textContainerInset.width + textField.textContainer.lineFragmentPadding;
+    CGFloat textMidY = NSMidY(textScrollView.frame);
 
-    AssertTrue(textField.isEnabled, "input text field must be enabled");
     AssertTrue(textField.isEditable, "input text field must be editable");
     AssertTrue(textField.isSelectable, "input text field must be selectable");
     AssertTrue(fabs(textStartX - 20.0) <= 0.5, "input text must start 20px from the left edge");
@@ -64,7 +75,7 @@ static void TestInputPlaceholderUsesTwentyPointInsetAndVerticalCenter(void) {
 
 static void TestInputCommandVPastesClipboardText(void) {
     InputBarView *inputBar = [[InputBarView alloc] initWithFrame:NSMakeRect(0, 0, 320, 44)];
-    NSTextField *textField = [inputBar valueForKey:@"textField"];
+    NSTextView *textField = [inputBar valueForKey:@"textField"];
     NSButton *saveButton = [inputBar valueForKey:@"saveButton"];
 
     NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
@@ -86,8 +97,60 @@ static void TestInputCommandVPastesClipboardText(void) {
     BOOL handled = [textField performKeyEquivalent:event];
 
     AssertTrue(handled, "input text field must handle command-v");
-    AssertEqualObjects(textField.stringValue, @"pasted command", "command-v must paste clipboard text into the input");
+    AssertEqualObjects(textField.string, @"pasted command", "command-v must paste clipboard text into the input");
+    NSColor *pastedTextColor = [textField.textStorage attribute:NSForegroundColorAttributeName
+                                                        atIndex:0
+                                                 effectiveRange:nil];
+    AssertEqualObjects(pastedTextColor, textField.textColor,
+                       "pasted input must use the same text color as keyboard input");
     AssertTrue(saveButton.enabled, "pasted input must enable the save button");
+}
+
+static void TestInputWrapsAndGrowsToThreeLinesThenScrolls(void) {
+    InputBarView *inputBar = [[InputBarView alloc] initWithFrame:NSMakeRect(0, 0, 320, 50)];
+    inputBar.translatesAutoresizingMaskIntoConstraints = YES;
+    [inputBar layoutSubtreeIfNeeded];
+
+    NSTextView *textView = [inputBar valueForKey:@"textField"];
+    NSScrollView *scrollView = [inputBar valueForKey:@"textScrollView"];
+    CGFloat singleLineHeight = inputBar.intrinsicContentSize.height;
+
+    textView.string = [@"" stringByPaddingToLength:35 withString:@"较长内容需要自动换行" startingAtIndex:0];
+    [inputBar textDidChange:[NSNotification notificationWithName:NSTextDidChangeNotification object:textView]];
+    [inputBar layoutSubtreeIfNeeded];
+    CGFloat wrappedHeight = inputBar.intrinsicContentSize.height;
+
+    textView.string = [@"" stringByPaddingToLength:120 withString:@"较长内容需要自动换行" startingAtIndex:0];
+    [inputBar textDidChange:[NSNotification notificationWithName:NSTextDidChangeNotification object:textView]];
+    [inputBar layoutSubtreeIfNeeded];
+
+    CGFloat lineHeight = ceil([textView.layoutManager defaultLineHeightForFont:textView.font]);
+    AssertTrue(wrappedHeight > singleLineHeight, "input must grow when long content wraps onto additional lines");
+    AssertTrue(NSHeight(scrollView.frame) <= (lineHeight * 3.0) + 4.5,
+               "input text viewport must be capped at three lines");
+    AssertTrue(scrollView.hasVerticalScroller, "input must enable internal scrolling after three lines");
+    AssertTrue(NSHeight(textView.frame) > NSHeight(scrollView.contentView.bounds),
+               "overflowing input text must remain available inside the scrollable document");
+    AssertTrue(!scrollView.hasHorizontalScroller && textView.textContainer.widthTracksTextView,
+               "input content must wrap instead of scrolling horizontally");
+}
+
+static void TestWindowAppliesGrowingInputIntrinsicHeight(void) {
+    [NSApplication sharedApplication];
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:TemporaryStoreURL()];
+    ReminderWindowController *controller = [[ReminderWindowController alloc] initWithStore:store];
+    InputBarView *inputBar = [controller valueForKey:@"inputBar"];
+    NSTextView *textView = [inputBar valueForKey:@"textField"];
+    [controller.window.contentView layoutSubtreeIfNeeded];
+    CGFloat initialHeight = NSHeight(inputBar.frame);
+
+    textView.string = [@"" stringByPaddingToLength:120 withString:@"输入框应随自动换行增加高度" startingAtIndex:0];
+    [inputBar textDidChange:[NSNotification notificationWithName:NSTextDidChangeNotification object:textView]];
+    [controller.window.contentView layoutSubtreeIfNeeded];
+    [controller.window.contentView layoutSubtreeIfNeeded];
+
+    AssertTrue(NSHeight(inputBar.frame) > initialHeight,
+               "window layout must apply the input bar's growing intrinsic height");
 }
 
 static NSEvent *CommandKeyEvent(NSString *characters, unsigned short keyCode) {
@@ -103,10 +166,14 @@ static NSEvent *CommandKeyEvent(NSString *characters, unsigned short keyCode) {
                              keyCode:keyCode];
 }
 
-static NSTextField *FindRowTextField(ReminderRowView *row) {
-    for (NSView *subview in row.subviews) {
-        if ([subview isKindOfClass:NSTextField.class]) {
-            return (NSTextField *)subview;
+static NSTextView *FindTextView(NSView *view) {
+    if ([view isKindOfClass:NSTextView.class]) {
+        return (NSTextView *)view;
+    }
+    for (NSView *subview in view.subviews) {
+        NSTextView *textView = FindTextView(subview);
+        if (textView) {
+            return textView;
         }
     }
     return nil;
@@ -160,11 +227,10 @@ static void TestRowTextIsSelectableButNotEditable(void) {
     ReminderCategory *category = [ReminderCategory.defaultCategories firstObject];
     ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
 
-    NSTextField *textField = FindRowTextField(row);
+    NSTextView *textField = FindTextView(row);
 
-    AssertTrue(textField != nil, "row must render item content in a text field");
-    AssertEqualObjects(textField.stringValue, @"copy partial text", "row text field must show item content");
-    AssertTrue(textField.isEnabled, "row text field must be enabled for selection");
+    AssertTrue(textField != nil, "row must render item content in a text view");
+    AssertEqualObjects(textField.string, @"copy partial text", "row text view must show item content");
     AssertTrue(textField.isSelectable, "row text field must allow mouse selection for command-c");
     AssertTrue(!textField.isEditable, "row text field must not edit saved item content");
 }
@@ -187,16 +253,11 @@ static void TestRowTextCommandCCopiesSelectedText(void) {
                                                        defer:NO];
     [window.contentView addSubview:row];
 
-    NSTextField *textField = FindRowTextField(row);
-    AssertTrue(textField != nil, "row must render item content in a text field before copy");
+    NSTextView *textField = FindTextView(row);
+    AssertTrue(textField != nil, "row must render item content in a text view before copy");
 
     [window makeFirstResponder:textField];
-    [textField selectText:nil];
-    NSText *editor = textField.currentEditor;
-    AssertTrue(editor != nil, "row text field must create a field editor for selected text");
-    if (editor) {
-        editor.selectedRange = NSMakeRange(5, 7);
-    }
+    textField.selectedRange = NSMakeRange(5, 7);
 
     NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
     [pasteboard clearContents];
@@ -210,6 +271,73 @@ static void TestRowTextCommandCCopiesSelectedText(void) {
 
     [row removeFromSuperview];
     [window orderOut:nil];
+}
+
+static void TestSavedContentWrapsToThreeLinesThenScrolls(void) {
+    ReminderItem *item = [[ReminderItem alloc] initWithItemID:@"row-long"
+                                                   categoryID:@"work"
+                                                      content:[@"" stringByPaddingToLength:140
+                                                                                     withString:@"已添加的较长内容需要自动换行"
+                                                                                startingAtIndex:0]
+                                                    createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
+    ReminderCategory *category = [ReminderCategory.defaultCategories firstObject];
+    ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
+    row.translatesAutoresizingMaskIntoConstraints = YES;
+    row.frame = NSMakeRect(0, 0, 360, 66);
+    [row layoutSubtreeIfNeeded];
+    [row layoutSubtreeIfNeeded];
+
+    NSTextView *textView = FindTextView(row);
+    NSScrollView *scrollView = [row valueForKey:@"contentScrollView"];
+    NSLayoutConstraint *rowHeightConstraint = [row valueForKey:@"rowHeightConstraint"];
+    CGFloat lineHeight = ceil([textView.layoutManager defaultLineHeightForFont:textView.font]);
+
+    AssertTrue(rowHeightConstraint.constant > 66.0, "multi-line saved content must increase its row height");
+    AssertTrue(NSHeight(scrollView.frame) <= (lineHeight * 3.0) + 4.5,
+               "saved content viewport must be capped at three lines");
+    AssertTrue(scrollView.hasVerticalScroller, "saved content must scroll inside its row after three lines");
+    AssertTrue(NSHeight(textView.frame) > NSHeight(scrollView.contentView.bounds),
+               "all saved content must remain reachable inside the row scroller");
+    AssertTrue(!scrollView.hasHorizontalScroller && textView.textContainer.widthTracksTextView,
+               "saved content must wrap instead of being truncated horizontally");
+}
+
+static void TestRowWheelEventsReachTheListScroller(void) {
+    [NSApplication sharedApplication];
+    ReminderRecordingScrollView *listScrollView = [[ReminderRecordingScrollView alloc] initWithFrame:NSMakeRect(0, 0, 480, 300)];
+    NSView *documentView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 480, 600)];
+    listScrollView.documentView = documentView;
+
+    ReminderItem *item = [[ReminderItem alloc] initWithItemID:@"row-wheel"
+                                                   categoryID:@"quickCommand"
+                                                      content:@"git status"
+                                                    createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
+    ReminderCategory *category = [ReminderCategory.defaultCategories lastObject];
+    ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
+    row.translatesAutoresizingMaskIntoConstraints = YES;
+    row.frame = NSMakeRect(20, 500, 440, 66);
+    [documentView addSubview:row];
+    [row layoutSubtreeIfNeeded];
+
+    NSTextView *textView = FindTextView(row);
+    NSScrollView *contentScrollView = [row valueForKey:@"contentScrollView"];
+    NSEvent *event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                                        location:NSZeroPoint
+                                   modifierFlags:0
+                                       timestamp:0
+                                    windowNumber:0
+                                         context:nil
+                                         subtype:0
+                                           data1:0
+                                           data2:0];
+
+    AssertTrue(!contentScrollView.hasVerticalScroller, "single-line row must not reserve an internal scrolling target");
+    [textView scrollWheel:event];
+    AssertTrue(listScrollView.receivedScrollWheelEvents == 1,
+               "wheel events over row text must reach the list scroller");
+    [row scrollWheel:event];
+    AssertTrue(listScrollView.receivedScrollWheelEvents == 2,
+               "wheel events over the row background must reach the list scroller");
 }
 
 static void TestQuickCommandCopyShowsSuccessToast(void) {
@@ -265,7 +393,7 @@ static void TestNotesStyleWindowAndEmptyState(void) {
     NSTextField *itemCount = [controller valueForKey:@"itemCountLabel"];
     NSView *emptyState = [controller valueForKey:@"emptyStateView"];
     InputBarView *inputBar = [controller valueForKey:@"inputBar"];
-    NSTextField *textField = [inputBar valueForKey:@"textField"];
+    NSTextView *textField = [inputBar valueForKey:@"textField"];
 
     AssertTrue((controller.window.styleMask & NSWindowStyleMaskFullSizeContentView) != 0,
                "notes-style window must extend content into the titlebar");
@@ -273,10 +401,15 @@ static void TestNotesStyleWindowAndEmptyState(void) {
                "notes-style window must use a visually integrated titlebar");
     AssertTrue(controller.window.minSize.width >= 700.0,
                "two-column layout must keep a usable minimum width");
+    NSRect defaultContentRect = [controller.window contentRectForFrameRect:controller.window.frame];
+    AssertTrue(fabs(NSWidth(defaultContentRect) - 1280.0) <= 0.5 &&
+               fabs(NSHeight(defaultContentRect) - 800.0) <= 0.5,
+               "default window content size must be 1280 by 800");
     AssertEqualObjects(categoryTitle.stringValue, @"工作", "main header must show the active folder");
     AssertEqualObjects(itemCount.stringValue, @"0 条备忘", "main header must show the empty item count");
     AssertTrue(!emptyState.hidden, "empty folder must show an empty-state explanation");
-    AssertTrue([textField.placeholderAttributedString.string containsString:@"工作"],
+    NSAttributedString *placeholder = [textField valueForKey:@"placeholderAttributedString"];
+    AssertTrue([placeholder.string containsString:@"工作"],
                "composer placeholder must identify the active folder");
 }
 
@@ -309,7 +442,7 @@ static void TestRowsUseNotesStyleHeightAndCommandTypography(void) {
                                                     createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
     ReminderCategory *category = [ReminderCategory.defaultCategories lastObject];
     ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
-    NSTextField *textField = FindRowTextField(row);
+    NSTextView *textField = FindTextView(row);
 
     BOOL hasExpectedHeight = NO;
     for (NSLayoutConstraint *constraint in row.constraints) {
@@ -371,8 +504,12 @@ int main(void) {
         TestListDocumentViewUsesTopOrigin();
         TestInputPlaceholderUsesTwentyPointInsetAndVerticalCenter();
         TestInputCommandVPastesClipboardText();
+        TestInputWrapsAndGrowsToThreeLinesThenScrolls();
+        TestWindowAppliesGrowingInputIntrinsicHeight();
         TestRowTextIsSelectableButNotEditable();
         TestRowTextCommandCCopiesSelectedText();
+        TestSavedContentWrapsToThreeLinesThenScrolls();
+        TestRowWheelEventsReachTheListScroller();
         TestQuickCommandCopyShowsSuccessToast();
         TestQuickCommandCopyButtonHasPressedTextFeedback();
         TestNotesStyleWindowAndEmptyState();
