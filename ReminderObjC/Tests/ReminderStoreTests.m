@@ -40,12 +40,13 @@ static void TestDefaultCategories(void) {
     ReminderStore *store = MakeStore(NULL);
     NSArray<ReminderCategory *> *categories = store.categories;
 
-    AssertEqualObjects([categories valueForKey:@"identifier"], (@[@"work", @"life", @"quickCommand"]), "default category order");
-    AssertEqualObjects([categories valueForKey:@"displayName"], (@[@"工作", @"生活", @"快捷命令"]), "default category display names");
+    AssertEqualObjects([categories valueForKey:@"identifier"], (@[@"work", @"life", @"quickCommand", @"raycastCommand"]), "default category order");
+    AssertEqualObjects([categories valueForKey:@"displayName"], (@[@"工作", @"生活", @"快捷命令", @"Raycast命令"]), "default category display names");
     AssertTrue(categories[0].rowActions == ReminderRowActionDelete, "work only deletes");
     AssertTrue(categories[1].rowActions == ReminderRowActionDelete, "life only deletes");
     AssertTrue((categories[2].rowActions & ReminderRowActionCopy) != 0, "quick command copies");
     AssertTrue((categories[2].rowActions & ReminderRowActionDelete) != 0, "quick command deletes");
+    AssertTrue(categories[3].rowActions == ReminderRowActionDelete, "Raycast command behaves like work");
     AssertEqualObjects(store.currentCategoryID, @"work", "default category is work");
 }
 
@@ -62,6 +63,35 @@ static void TestAddTrimAndCategoryIsolation(void) {
     AssertEqualObjects([[store itemsForCategory:@"work"] valueForKey:@"content"], (@[@"work item"]), "work content is trimmed");
     AssertEqualObjects([[store itemsForCategory:@"life"] valueForKey:@"content"], (@[@"life item"]), "life content is isolated");
     AssertEqualObjects([[store currentItems] valueForKey:@"content"], (@[@"cd /tmp && ls"]), "current quick command content is trimmed");
+}
+
+static void TestAddRenameAndRemoveCategory(void) {
+    NSURL *url = nil;
+    ReminderStore *store = MakeStore(&url);
+
+    NSString *categoryID = [store addCategoryWithDisplayName:@"  学习  "];
+    AssertTrue(categoryID.length > 0, "custom category is created");
+    AssertEqualObjects([store categoryForIdentifier:categoryID].displayName, @"学习", "custom category name is trimmed");
+    AssertTrue([store categoryForIdentifier:categoryID].rowActions == ReminderRowActionDelete,
+               "custom category behaves like work");
+    AssertTrue([store addCategoryWithDisplayName:@"学习"] == nil, "duplicate category names are rejected");
+
+    [store switchToCategory:categoryID];
+    [store addItemWithContent:@"read docs"];
+    AssertTrue([store renameCategoryWithIdentifier:categoryID displayName:@"研究"], "custom category can be renamed");
+    AssertEqualObjects([store categoryForIdentifier:categoryID].displayName, @"研究", "renaming preserves category identity");
+    AssertEqualObjects([[store currentItems] valueForKey:@"content"], (@[@"read docs"]), "renaming preserves category items");
+
+    [store flushSync];
+    ReminderStore *reloaded = [[ReminderStore alloc] initWithStorageURL:url];
+    AssertEqualObjects([reloaded categoryForIdentifier:categoryID].displayName, @"研究", "custom category name reloads");
+    AssertEqualObjects([[reloaded itemsForCategory:categoryID] valueForKey:@"content"], (@[@"read docs"]), "custom category items reload");
+
+    [reloaded switchToCategory:categoryID];
+    AssertTrue([reloaded removeCategoryWithIdentifier:categoryID], "custom category can be removed");
+    AssertTrue([reloaded categoryForIdentifier:categoryID] == nil, "removed category is no longer listed");
+    AssertTrue(![reloaded.currentCategoryID isEqualToString:categoryID], "removing the active category selects a fallback");
+    AssertTrue([reloaded itemsForCategory:categoryID].count == 0, "removing a category removes its items");
 }
 
 static void TestDeleteOnlyRemovesFromMatchingCategory(void) {
@@ -94,7 +124,7 @@ static void TestLegacySnapshotMigration(void) {
     AssertEqualObjects([[store itemsForCategory:@"quickCommand"] valueForKey:@"content"], (@[@"legacy command"]), "legacy quick commands load");
 }
 
-static void TestFlushWritesSchemaV2AndReloads(void) {
+static void TestFlushWritesSchemaV3AndReloads(void) {
     NSURL *url = nil;
     ReminderStore *store = MakeStore(&url);
     [store addItemWithContent:@"persisted work"];
@@ -104,8 +134,9 @@ static void TestFlushWritesSchemaV2AndReloads(void) {
 
     NSData *data = [NSData dataWithContentsOfURL:url];
     NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-    AssertEqualObjects(json[@"schemaVersion"], @2, "schema version 2 is written");
-    AssertTrue([json[@"categories"] isKindOfClass:NSDictionary.class], "schema v2 has categories dictionary");
+    AssertEqualObjects(json[@"schemaVersion"], @3, "schema version 3 is written");
+    AssertTrue([json[@"categoryDefinitions"] isKindOfClass:NSArray.class], "schema v3 has category definitions");
+    AssertTrue([json[@"categories"] isKindOfClass:NSDictionary.class], "schema v3 has categories dictionary");
 
     ReminderStore *reloaded = [[ReminderStore alloc] initWithStorageURL:url];
     AssertEqualObjects([[reloaded itemsForCategory:@"work"] valueForKey:@"content"], (@[@"persisted work"]), "work reloads");
@@ -127,9 +158,10 @@ int main(void) {
     @autoreleasepool {
         TestDefaultCategories();
         TestAddTrimAndCategoryIsolation();
+        TestAddRenameAndRemoveCategory();
         TestDeleteOnlyRemovesFromMatchingCategory();
         TestLegacySnapshotMigration();
-        TestFlushWritesSchemaV2AndReloads();
+        TestFlushWritesSchemaV3AndReloads();
         TestCorruptedJSONFallsBackToEmpty();
 
         if (gFailures > 0) {

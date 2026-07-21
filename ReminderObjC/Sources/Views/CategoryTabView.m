@@ -166,10 +166,23 @@
 
 @end
 
+@interface ReminderSidebarDocumentView : NSView
+@end
+
+@implementation ReminderSidebarDocumentView
+
+- (BOOL)isFlipped {
+    return YES;
+}
+
+@end
+
 @interface CategoryTabView ()
 @property (nonatomic, copy) NSArray<ReminderCategory *> *categories;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, ReminderSidebarButton *> *buttonsByCategory;
 @property (nonatomic, copy) NSString *selectedCategoryID;
+@property (nonatomic, strong) NSStackView *categoryStackView;
+@property (nonatomic, strong) NSButton *addCategoryButton;
 @end
 
 @implementation CategoryTabView
@@ -177,7 +190,6 @@
 - (instancetype)initWithCategories:(NSArray<ReminderCategory *> *)categories {
     self = [super initWithFrame:NSZeroRect];
     if (self) {
-        _categories = [categories copy];
         _buttonsByCategory = [NSMutableDictionary dictionary];
 
         self.translatesAutoresizingMaskIntoConstraints = NO;
@@ -194,13 +206,38 @@
         sectionTitle.translatesAutoresizingMaskIntoConstraints = NO;
         [self addSubview:sectionTitle];
 
-        NSStackView *stackView = [[NSStackView alloc] init];
-        stackView.orientation = NSUserInterfaceLayoutOrientationVertical;
-        stackView.spacing = 4;
-        stackView.alignment = NSLayoutAttributeLeading;
-        stackView.distribution = NSStackViewDistributionFill;
-        stackView.translatesAutoresizingMaskIntoConstraints = NO;
-        [self addSubview:stackView];
+        NSScrollView *categoryScrollView = [[NSScrollView alloc] init];
+        categoryScrollView.drawsBackground = NO;
+        categoryScrollView.borderType = NSNoBorder;
+        categoryScrollView.hasVerticalScroller = YES;
+        categoryScrollView.autohidesScrollers = YES;
+        categoryScrollView.scrollerStyle = NSScrollerStyleOverlay;
+        categoryScrollView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self addSubview:categoryScrollView];
+
+        ReminderSidebarDocumentView *documentView = [[ReminderSidebarDocumentView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
+        documentView.translatesAutoresizingMaskIntoConstraints = NO;
+        categoryScrollView.documentView = documentView;
+
+        self.categoryStackView = [[NSStackView alloc] init];
+        self.categoryStackView.orientation = NSUserInterfaceLayoutOrientationVertical;
+        self.categoryStackView.spacing = 4;
+        self.categoryStackView.alignment = NSLayoutAttributeLeading;
+        self.categoryStackView.distribution = NSStackViewDistributionFill;
+        self.categoryStackView.translatesAutoresizingMaskIntoConstraints = NO;
+        [documentView addSubview:self.categoryStackView];
+
+        self.addCategoryButton = [NSButton buttonWithTitle:@"新建栏目" target:self action:@selector(addCategoryPressed:)];
+        self.addCategoryButton.bordered = NO;
+        self.addCategoryButton.font = [ReminderTheme mediumFontOfSize:13];
+        self.addCategoryButton.contentTintColor = ReminderTheme.secondaryTextColor;
+        self.addCategoryButton.image = [NSImage imageWithSystemSymbolName:@"plus" accessibilityDescription:@"新建栏目"];
+        self.addCategoryButton.imagePosition = NSImageLeft;
+        self.addCategoryButton.alignment = NSTextAlignmentLeft;
+        self.addCategoryButton.toolTip = @"新建栏目";
+        self.addCategoryButton.accessibilityLabel = @"新建栏目";
+        self.addCategoryButton.translatesAutoresizingMaskIntoConstraints = NO;
+        [self addSubview:self.addCategoryButton];
 
         [NSLayoutConstraint activateConstraints:@[
             [appTitle.topAnchor constraintEqualToAnchor:self.topAnchor constant:58],
@@ -210,26 +247,58 @@
             [sectionTitle.topAnchor constraintEqualToAnchor:appTitle.bottomAnchor constant:28],
             [sectionTitle.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:22],
 
-            [stackView.topAnchor constraintEqualToAnchor:sectionTitle.bottomAnchor constant:8],
-            [stackView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:10],
-            [stackView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10]
+            [categoryScrollView.topAnchor constraintEqualToAnchor:sectionTitle.bottomAnchor constant:8],
+            [categoryScrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [categoryScrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [categoryScrollView.bottomAnchor constraintEqualToAnchor:self.addCategoryButton.topAnchor constant:-8],
+
+            [documentView.leadingAnchor constraintEqualToAnchor:categoryScrollView.contentView.leadingAnchor],
+            [documentView.trailingAnchor constraintEqualToAnchor:categoryScrollView.contentView.trailingAnchor],
+            [documentView.topAnchor constraintEqualToAnchor:categoryScrollView.contentView.topAnchor],
+            [documentView.widthAnchor constraintEqualToAnchor:categoryScrollView.contentView.widthAnchor],
+            [documentView.heightAnchor constraintGreaterThanOrEqualToAnchor:categoryScrollView.contentView.heightAnchor],
+
+            [self.categoryStackView.topAnchor constraintEqualToAnchor:documentView.topAnchor],
+            [self.categoryStackView.leadingAnchor constraintEqualToAnchor:documentView.leadingAnchor constant:10],
+            [self.categoryStackView.trailingAnchor constraintEqualToAnchor:documentView.trailingAnchor constant:-10],
+            [self.categoryStackView.bottomAnchor constraintLessThanOrEqualToAnchor:documentView.bottomAnchor constant:-8],
+
+            [self.addCategoryButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:18],
+            [self.addCategoryButton.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-16],
+            [self.addCategoryButton.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-18],
+            [self.addCategoryButton.heightAnchor constraintEqualToConstant:30]
         ]];
 
-        for (ReminderCategory *category in categories) {
-            ReminderSidebarButton *button = [[ReminderSidebarButton alloc] initWithFrame:NSZeroRect];
-            button.categoryDisplayName = category.displayName;
-            button.target = self;
-            button.action = @selector(categoryPressed:);
-            button.identifier = category.identifier;
-            button.symbolName = [self symbolNameForCategoryID:category.identifier];
-            button.translatesAutoresizingMaskIntoConstraints = NO;
-            [stackView addArrangedSubview:button];
-            [button.heightAnchor constraintEqualToConstant:36].active = YES;
-            [button.widthAnchor constraintEqualToAnchor:stackView.widthAnchor].active = YES;
-            [self.buttonsByCategory setObject:button forKey:category.identifier];
-        }
+        [self setCategories:categories];
     }
     return self;
+}
+
+- (void)setCategories:(NSArray<ReminderCategory *> *)categories {
+    _categories = [categories copy];
+
+    NSArray<NSView *> *existingButtons = [self.categoryStackView.arrangedSubviews copy];
+    for (NSView *button in existingButtons) {
+        [self.categoryStackView removeArrangedSubview:button];
+        [button removeFromSuperview];
+    }
+    [self.buttonsByCategory removeAllObjects];
+
+    for (ReminderCategory *category in self.categories) {
+        ReminderSidebarButton *button = [[ReminderSidebarButton alloc] initWithFrame:NSZeroRect];
+        button.categoryDisplayName = category.displayName;
+        button.target = self;
+        button.action = @selector(categoryPressed:);
+        button.identifier = category.identifier;
+        button.symbolName = [self symbolNameForCategoryID:category.identifier];
+        button.menu = [self contextMenuForCategory:category];
+        button.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.categoryStackView addArrangedSubview:button];
+        [button.heightAnchor constraintEqualToConstant:36].active = YES;
+        [button.widthAnchor constraintEqualToAnchor:self.categoryStackView.widthAnchor].active = YES;
+        self.buttonsByCategory[category.identifier] = button;
+    }
+    [self updateButtons];
 }
 
 - (void)setSelectedCategoryID:(NSString *)categoryID {
@@ -247,6 +316,48 @@
     }
 }
 
+- (void)addCategoryPressed:(id)sender {
+    (void)sender;
+    if (self.onAddCategory) {
+        self.onAddCategory();
+    }
+}
+
+- (NSMenu *)contextMenuForCategory:(ReminderCategory *)category {
+    NSMenu *menu = [[NSMenu alloc] initWithTitle:category.displayName];
+    menu.autoenablesItems = NO;
+
+    NSMenuItem *renameItem = [[NSMenuItem alloc] initWithTitle:@"重命名…"
+                                                       action:@selector(renameCategoryPressed:)
+                                                keyEquivalent:@""];
+    renameItem.target = self;
+    renameItem.representedObject = category.identifier;
+    [menu addItem:renameItem];
+
+    NSMenuItem *removeItem = [[NSMenuItem alloc] initWithTitle:@"移除…"
+                                                       action:@selector(removeCategoryPressed:)
+                                                keyEquivalent:@""];
+    removeItem.target = self;
+    removeItem.representedObject = category.identifier;
+    removeItem.enabled = self.categories.count > 1;
+    [menu addItem:removeItem];
+    return menu;
+}
+
+- (void)renameCategoryPressed:(NSMenuItem *)sender {
+    NSString *categoryID = sender.representedObject;
+    if (categoryID.length > 0 && self.onRenameCategory) {
+        self.onRenameCategory(categoryID);
+    }
+}
+
+- (void)removeCategoryPressed:(NSMenuItem *)sender {
+    NSString *categoryID = sender.representedObject;
+    if (categoryID.length > 0 && self.onRemoveCategory) {
+        self.onRemoveCategory(categoryID);
+    }
+}
+
 - (NSString *)symbolNameForCategoryID:(NSString *)categoryID {
     if ([categoryID isEqualToString:@"work"]) {
         return @"briefcase.fill";
@@ -254,7 +365,10 @@
     if ([categoryID isEqualToString:@"life"]) {
         return @"house.fill";
     }
-    return @"terminal.fill";
+    if ([categoryID isEqualToString:@"quickCommand"] || [categoryID isEqualToString:@"raycastCommand"]) {
+        return @"terminal.fill";
+    }
+    return @"folder.fill";
 }
 
 - (void)updateItemCounts:(NSDictionary<NSString *,NSNumber *> *)itemCounts {

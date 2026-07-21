@@ -6,6 +6,7 @@
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSMutableArray<ReminderItem *> *> *itemsByCategory;
 @property (nonatomic, strong) NSURL *storageURL;
 @property (nonatomic) dispatch_queue_t persistenceQueue;
+- (NSString *)validatedDisplayName:(NSString *)rawDisplayName excludingCategoryID:(NSString *)excludedIdentifier;
 @end
 
 @implementation ReminderStore
@@ -79,6 +80,65 @@
     [self persistAsync];
 }
 
+- (NSString *)addCategoryWithDisplayName:(NSString *)rawDisplayName {
+    NSString *displayName = [self validatedDisplayName:rawDisplayName excludingCategoryID:nil];
+    if (!displayName) {
+        return nil;
+    }
+
+    NSString *identifier = [NSString stringWithFormat:@"custom-%@", NSUUID.UUID.UUIDString.lowercaseString];
+    ReminderCategory *category = [[ReminderCategory alloc] initWithIdentifier:identifier
+                                                                  displayName:displayName
+                                                                   rowActions:ReminderRowActionDelete];
+    self.categories = [self.categories arrayByAddingObject:category];
+    self.itemsByCategory[identifier] = [NSMutableArray array];
+    [self persistAsync];
+    return identifier;
+}
+
+- (BOOL)renameCategoryWithIdentifier:(NSString *)identifier displayName:(NSString *)rawDisplayName {
+    ReminderCategory *existingCategory = [self categoryForIdentifier:identifier];
+    NSString *displayName = [self validatedDisplayName:rawDisplayName excludingCategoryID:identifier];
+    if (!existingCategory || !displayName) {
+        return NO;
+    }
+
+    NSUInteger categoryIndex = [self.categories indexOfObjectIdenticalTo:existingCategory];
+    if (categoryIndex == NSNotFound) {
+        return NO;
+    }
+
+    ReminderCategory *renamedCategory = [[ReminderCategory alloc] initWithIdentifier:existingCategory.identifier
+                                                                          displayName:displayName
+                                                                           rowActions:existingCategory.rowActions];
+    NSMutableArray<ReminderCategory *> *updatedCategories = [self.categories mutableCopy];
+    updatedCategories[categoryIndex] = renamedCategory;
+    self.categories = [updatedCategories copy];
+    [self persistAsync];
+    return YES;
+}
+
+- (BOOL)removeCategoryWithIdentifier:(NSString *)identifier {
+    ReminderCategory *category = [self categoryForIdentifier:identifier];
+    if (!category || self.categories.count <= 1) {
+        return NO;
+    }
+
+    NSUInteger removedIndex = [self.categories indexOfObjectIdenticalTo:category];
+    NSMutableArray<ReminderCategory *> *updatedCategories = [self.categories mutableCopy];
+    [updatedCategories removeObjectAtIndex:removedIndex];
+    self.categories = [updatedCategories copy];
+    [self.itemsByCategory removeObjectForKey:identifier];
+
+    if ([self.currentCategoryID isEqualToString:identifier]) {
+        NSUInteger fallbackIndex = MIN(removedIndex, self.categories.count - 1);
+        self.currentCategoryID = self.categories[fallbackIndex].identifier;
+    }
+
+    [self persistAsync];
+    return YES;
+}
+
 - (BOOL)switchToCategory:(NSString *)categoryID {
     if (![self categoryForIdentifier:categoryID]) {
         return NO;
@@ -122,7 +182,13 @@
 
 - (NSDictionary *)snapshotDictionary {
     NSMutableDictionary *categoryItems = [NSMutableDictionary dictionary];
+    NSMutableArray *categoryDefinitions = [NSMutableArray array];
     for (ReminderCategory *category in self.categories) {
+        [categoryDefinitions addObject:@{
+            @"id": category.identifier,
+            @"displayName": category.displayName,
+            @"rowActions": @(category.rowActions)
+        }];
         NSMutableArray *serialized = [NSMutableArray array];
         for (ReminderItem *item in self.itemsByCategory[category.identifier]) {
             [serialized addObject:[item dictionaryRepresentation]];
@@ -131,7 +197,8 @@
     }
 
     return @{
-        @"schemaVersion": @2,
+        @"schemaVersion": @3,
+        @"categoryDefinitions": categoryDefinitions,
         @"categories": categoryItems
     };
 }
@@ -150,6 +217,46 @@
     }
 
     NSDictionary *root = (NSDictionary *)json;
+    NSArray *categoryDefinitions = root[@"categoryDefinitions"];
+    if ([categoryDefinitions isKindOfClass:NSArray.class]) {
+        NSMutableArray<ReminderCategory *> *loadedCategories = [NSMutableArray array];
+        NSMutableSet<NSString *> *loadedIdentifiers = [NSMutableSet set];
+        NSMutableSet<NSString *> *loadedNames = [NSMutableSet set];
+        for (id rawDefinition in categoryDefinitions) {
+            if (![rawDefinition isKindOfClass:NSDictionary.class]) {
+                continue;
+            }
+            NSDictionary *definition = (NSDictionary *)rawDefinition;
+            NSString *identifier = definition[@"id"];
+            NSString *displayName = definition[@"displayName"];
+            NSNumber *rowActions = definition[@"rowActions"];
+            NSString *normalizedName = displayName.lowercaseString;
+            if (![identifier isKindOfClass:NSString.class] || identifier.length == 0 ||
+                ![displayName isKindOfClass:NSString.class] || displayName.length == 0 || displayName.length > 40 ||
+                [loadedIdentifiers containsObject:identifier] || [loadedNames containsObject:normalizedName]) {
+                continue;
+            }
+
+            ReminderRowAction actions = ReminderRowActionDelete;
+            if ([rowActions isKindOfClass:NSNumber.class] &&
+                (rowActions.unsignedIntegerValue & ReminderRowActionCopy) != 0) {
+                actions |= ReminderRowActionCopy;
+            }
+            [loadedCategories addObject:[[ReminderCategory alloc] initWithIdentifier:identifier
+                                                                         displayName:displayName
+                                                                          rowActions:actions]];
+            [loadedIdentifiers addObject:identifier];
+            [loadedNames addObject:normalizedName];
+        }
+        if (loadedCategories.count > 0) {
+            self.categories = [loadedCategories copy];
+            self.itemsByCategory = [self emptyItemsByCategory];
+            if (![self categoryForIdentifier:self.currentCategoryID]) {
+                self.currentCategoryID = self.categories.firstObject.identifier;
+            }
+        }
+    }
+
     NSDictionary *categoriesJSON = nil;
     if ([root[@"categories"] isKindOfClass:NSDictionary.class]) {
         categoriesJSON = root[@"categories"];
@@ -178,6 +285,25 @@
             }
         }
     }
+}
+
+- (NSString *)validatedDisplayName:(NSString *)rawDisplayName excludingCategoryID:(NSString *)excludedIdentifier {
+    if (![rawDisplayName isKindOfClass:NSString.class]) {
+        return nil;
+    }
+    NSString *displayName = [rawDisplayName stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (displayName.length == 0 || displayName.length > 40) {
+        return nil;
+    }
+    for (ReminderCategory *category in self.categories) {
+        if ([category.identifier isEqualToString:excludedIdentifier]) {
+            continue;
+        }
+        if ([category.displayName caseInsensitiveCompare:displayName] == NSOrderedSame) {
+            return nil;
+        }
+    }
+    return displayName;
 }
 
 + (void)writeSnapshot:(NSDictionary *)snapshot toURL:(NSURL *)url {

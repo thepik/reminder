@@ -2,6 +2,7 @@
 #import <math.h>
 #import "../Sources/Store/ReminderStore.h"
 #import "../Sources/Theme/ReminderTheme.h"
+#import "../Sources/Views/CategoryTabView.h"
 #import "../Sources/Views/InputBarView.h"
 #import "../Sources/Views/ReminderRowView.h"
 #import "../Sources/Views/ReminderWindowController.h"
@@ -42,6 +43,15 @@ static NSUInteger gFailures = 0;
 static NSURL *TemporaryStoreURL(void) {
     NSString *name = [[NSUUID UUID].UUIDString stringByAppendingPathExtension:@"json"];
     return [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:name]];
+}
+
+static ReminderCategory *CategoryWithIdentifier(NSString *identifier) {
+    for (ReminderCategory *category in ReminderCategory.defaultCategories) {
+        if ([category.identifier isEqualToString:identifier]) {
+            return category;
+        }
+    }
+    return nil;
 }
 
 static void TestListDocumentViewUsesTopOrigin(void) {
@@ -312,7 +322,7 @@ static void TestRowWheelEventsReachTheListScroller(void) {
                                                    categoryID:@"quickCommand"
                                                       content:@"git status"
                                                     createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
-    ReminderCategory *category = [ReminderCategory.defaultCategories lastObject];
+    ReminderCategory *category = CategoryWithIdentifier(@"quickCommand");
     ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
     row.translatesAutoresizingMaskIntoConstraints = YES;
     row.frame = NSMakeRect(20, 500, 440, 66);
@@ -368,7 +378,7 @@ static void TestQuickCommandCopyButtonHasPressedTextFeedback(void) {
                                                    categoryID:@"quickCommand"
                                                       content:@"git status"
                                                     createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
-    ReminderCategory *category = [ReminderCategory.defaultCategories lastObject];
+    ReminderCategory *category = CategoryWithIdentifier(@"quickCommand");
     ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
     NSButton *copyButton = FindButtonWithTitle(row, @"复制");
 
@@ -440,7 +450,7 @@ static void TestRowsUseNotesStyleHeightAndCommandTypography(void) {
                                                    categoryID:@"quickCommand"
                                                       content:@"git status"
                                                     createdAt:[NSDate dateWithTimeIntervalSince1970:0]];
-    ReminderCategory *category = [ReminderCategory.defaultCategories lastObject];
+    ReminderCategory *category = CategoryWithIdentifier(@"quickCommand");
     ReminderRowView *row = [[ReminderRowView alloc] initWithItem:item category:category];
     NSTextView *textField = FindTextView(row);
 
@@ -499,6 +509,43 @@ static void TestSidebarUsesFullWidthAlignment(void) {
                "sidebar live count must align right");
 }
 
+static void TestSidebarSupportsRaycastAndCategoryManagement(void) {
+    [NSApplication sharedApplication];
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:TemporaryStoreURL()];
+    ReminderWindowController *controller = [[ReminderWindowController alloc] initWithStore:store];
+    CategoryTabView *tabView = [controller valueForKey:@"tabView"];
+    NSDictionary *buttons = [tabView valueForKey:@"buttonsByCategory"];
+    NSButton *raycastButton = buttons[@"raycastCommand"];
+    NSButton *workButton = buttons[@"work"];
+    NSButton *addButton = [tabView valueForKey:@"addCategoryButton"];
+
+    AssertTrue(raycastButton != nil, "sidebar must show the default Raycast command category");
+    AssertEqualObjects([raycastButton valueForKey:@"categoryDisplayName"], @"Raycast命令",
+                       "Raycast command category must use the requested display name");
+    AssertEqualObjects(addButton.title, @"新建栏目", "sidebar must provide a bottom add-category button");
+    AssertEqualObjects([workButton.menu.itemArray valueForKey:@"title"], (@[@"重命名…", @"移除…"]),
+                       "right-click category menu must provide rename and remove actions");
+
+    __block BOOL addTriggered = NO;
+    __block NSString *renamedCategoryID = nil;
+    __block NSString *removedCategoryID = nil;
+    tabView.onAddCategory = ^{ addTriggered = YES; };
+    tabView.onRenameCategory = ^(NSString *categoryID) { renamedCategoryID = categoryID; };
+    tabView.onRemoveCategory = ^(NSString *categoryID) { removedCategoryID = categoryID; };
+
+    [addButton performClick:nil];
+    [NSApp sendAction:workButton.menu.itemArray[0].action
+                    to:workButton.menu.itemArray[0].target
+                  from:workButton.menu.itemArray[0]];
+    [NSApp sendAction:workButton.menu.itemArray[1].action
+                    to:workButton.menu.itemArray[1].target
+                  from:workButton.menu.itemArray[1]];
+
+    AssertTrue(addTriggered, "add-category button must trigger its handler");
+    AssertEqualObjects(renamedCategoryID, @"work", "rename menu item must identify its category");
+    AssertEqualObjects(removedCategoryID, @"work", "remove menu item must identify its category");
+}
+
 int main(void) {
     @autoreleasepool {
         TestListDocumentViewUsesTopOrigin();
@@ -517,6 +564,7 @@ int main(void) {
         TestRowsUseNotesStyleHeightAndCommandTypography();
         TestThemeFollowsLightAndDarkAppearance();
         TestSidebarUsesFullWidthAlignment();
+        TestSidebarSupportsRaycastAndCategoryManagement();
 
         if (gFailures > 0) {
             NSLog(@"%lu layout test failure(s)", (unsigned long)gFailures);

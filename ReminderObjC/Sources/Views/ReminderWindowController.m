@@ -152,6 +152,15 @@
     self.tabView.onSelectCategory = ^(NSString *categoryID) {
         [weakSelf selectCategory:categoryID];
     };
+    self.tabView.onAddCategory = ^{
+        [weakSelf promptToAddCategory];
+    };
+    self.tabView.onRenameCategory = ^(NSString *categoryID) {
+        [weakSelf promptToRenameCategory:categoryID];
+    };
+    self.tabView.onRemoveCategory = ^(NSString *categoryID) {
+        [weakSelf promptToRemoveCategory:categoryID];
+    };
     [sidebarView addSubview:self.tabView];
 
     self.mainView = [[NSView alloc] init];
@@ -307,6 +316,129 @@
         [self.emptyStateDescriptionLabel.bottomAnchor constraintEqualToAnchor:emptyView.bottomAnchor]
     ]];
     return emptyView;
+}
+
+- (void)promptToAddCategory {
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"新建栏目";
+    alert.informativeText = @"输入栏目名称（最多 40 个字符）。新栏目中的内容操作方式与“工作”一致。";
+    [alert addButtonWithTitle:@"创建"];
+    [alert addButtonWithTitle:@"取消"];
+
+    NSTextField *nameField = [self categoryNameFieldWithValue:@"" placeholder:@"栏目名称"];
+    alert.accessoryView = nameField;
+    alert.window.initialFirstResponder = nameField;
+
+    __weak typeof(self) weakSelf = self;
+    [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse returnCode) {
+        if (returnCode != NSAlertFirstButtonReturn) {
+            [weakSelf.inputBar focusInput];
+            return;
+        }
+        NSString *categoryID = [weakSelf.store addCategoryWithDisplayName:nameField.stringValue];
+        if (categoryID.length == 0) {
+            [weakSelf showToastWithText:@"名称无效或已存在"];
+            [weakSelf.inputBar focusInput];
+            return;
+        }
+        [weakSelf.store switchToCategory:categoryID];
+        [weakSelf refreshCategoriesAndRows];
+        [weakSelf showToastWithText:@"栏目已创建"];
+        [weakSelf.inputBar focusInput];
+    }];
+}
+
+- (void)promptToRenameCategory:(NSString *)categoryID {
+    ReminderCategory *category = [self.store categoryForIdentifier:categoryID];
+    if (!category) {
+        return;
+    }
+
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"重命名栏目";
+    alert.informativeText = [NSString stringWithFormat:@"为“%@”输入一个新名称（最多 40 个字符）。", category.displayName];
+    [alert addButtonWithTitle:@"重命名"];
+    [alert addButtonWithTitle:@"取消"];
+
+    NSTextField *nameField = [self categoryNameFieldWithValue:category.displayName placeholder:@"栏目名称"];
+    alert.accessoryView = nameField;
+    alert.window.initialFirstResponder = nameField;
+
+    __weak typeof(self) weakSelf = self;
+    [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse returnCode) {
+        if (returnCode != NSAlertFirstButtonReturn) {
+            [weakSelf.inputBar focusInput];
+            return;
+        }
+        if (![weakSelf.store renameCategoryWithIdentifier:categoryID displayName:nameField.stringValue]) {
+            [weakSelf showToastWithText:@"名称无效或已存在"];
+            [weakSelf.inputBar focusInput];
+            return;
+        }
+        [weakSelf refreshCategoriesAndRows];
+        [weakSelf showToastWithText:@"栏目已重命名"];
+        [weakSelf.inputBar focusInput];
+    }];
+}
+
+- (void)promptToRemoveCategory:(NSString *)categoryID {
+    ReminderCategory *category = [self.store categoryForIdentifier:categoryID];
+    if (!category || self.store.categories.count <= 1) {
+        return;
+    }
+
+    NSUInteger itemCount = [self.store itemsForCategory:categoryID].count;
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.alertStyle = NSAlertStyleCritical;
+    alert.messageText = [NSString stringWithFormat:@"移除“%@”？", category.displayName];
+    alert.informativeText = [NSString stringWithFormat:@"此操作会永久删除该栏目及其中的 %lu 条内容。请输入“%@”确认。",
+                             (unsigned long)itemCount,
+                             category.displayName];
+    [alert addButtonWithTitle:@"移除"];
+    [alert addButtonWithTitle:@"取消"];
+
+    NSTextField *confirmationField = [self categoryNameFieldWithValue:@"" placeholder:category.displayName];
+    alert.accessoryView = confirmationField;
+    alert.window.initialFirstResponder = confirmationField;
+
+    NSString *expectedName = category.displayName;
+    __weak typeof(self) weakSelf = self;
+    [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse returnCode) {
+        if (returnCode != NSAlertFirstButtonReturn) {
+            [weakSelf.inputBar focusInput];
+            return;
+        }
+        if (![confirmationField.stringValue isEqualToString:expectedName]) {
+            [weakSelf showToastWithText:@"栏目名称不匹配，未移除"];
+            [weakSelf.inputBar focusInput];
+            return;
+        }
+        if (![weakSelf.store removeCategoryWithIdentifier:categoryID]) {
+            [weakSelf showToastWithText:@"至少需要保留一个栏目"];
+            [weakSelf.inputBar focusInput];
+            return;
+        }
+        [weakSelf refreshCategoriesAndRows];
+        [weakSelf showToastWithText:@"栏目已移除"];
+        [weakSelf.inputBar focusInput];
+    }];
+}
+
+- (NSTextField *)categoryNameFieldWithValue:(NSString *)value placeholder:(NSString *)placeholder {
+    NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 320, 24)];
+    field.stringValue = value ?: @"";
+    field.placeholderString = placeholder;
+    field.font = [ReminderTheme regularFontOfSize:13];
+    field.accessibilityLabel = @"栏目名称";
+    return field;
+}
+
+- (void)refreshCategoriesAndRows {
+    [self.tabView setCategories:self.store.categories];
+    [self.tabView setSelectedCategoryID:self.store.currentCategoryID];
+    [self reloadRows];
+    [self.scrollView.contentView scrollToPoint:NSZeroPoint];
+    [self.scrollView reflectScrolledClipView:self.scrollView.contentView];
 }
 
 - (void)selectCategory:(NSString *)categoryID {

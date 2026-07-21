@@ -24,7 +24,10 @@
                                          rowActions:ReminderRowActionDelete],
         [[ReminderCategory alloc] initWithIdentifier:@"quickCommand"
                                         displayName:@"快捷命令"
-                                         rowActions:(ReminderRowActionDelete | ReminderRowActionCopy)]
+                                         rowActions:(ReminderRowActionDelete | ReminderRowActionCopy)],
+        [[ReminderCategory alloc] initWithIdentifier:@"raycastCommand"
+                                        displayName:@"Raycast命令"
+                                         rowActions:ReminderRowActionDelete]
     ];
 }
 
