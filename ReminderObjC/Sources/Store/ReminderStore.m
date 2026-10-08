@@ -89,7 +89,7 @@
     NSString *identifier = [NSString stringWithFormat:@"custom-%@", NSUUID.UUID.UUIDString.lowercaseString];
     ReminderCategory *category = [[ReminderCategory alloc] initWithIdentifier:identifier
                                                                   displayName:displayName
-                                                                   rowActions:ReminderRowActionDelete];
+                                                                   rowActions:(ReminderRowActionDelete | ReminderRowActionCopy)];
     self.categories = [self.categories arrayByAddingObject:category];
     self.itemsByCategory[identifier] = [NSMutableArray array];
     [self persistAsync];
@@ -237,10 +237,10 @@
                 continue;
             }
 
-            ReminderRowAction actions = ReminderRowActionDelete;
-            if ([rowActions isKindOfClass:NSNumber.class] &&
-                (rowActions.unsignedIntegerValue & ReminderRowActionCopy) != 0) {
-                actions |= ReminderRowActionCopy;
+            // Every folder supports copy and delete; upgrade actions saved by older versions.
+            ReminderRowAction actions = (ReminderRowActionDelete | ReminderRowActionCopy);
+            if ([rowActions isKindOfClass:NSNumber.class]) {
+                actions |= rowActions.unsignedIntegerValue;
             }
             [loadedCategories addObject:[[ReminderCategory alloc] initWithIdentifier:identifier
                                                                          displayName:displayName

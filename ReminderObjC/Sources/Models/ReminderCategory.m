@@ -18,16 +18,16 @@
     return @[
         [[ReminderCategory alloc] initWithIdentifier:@"work"
                                         displayName:@"工作"
-                                         rowActions:ReminderRowActionDelete],
+                                         rowActions:(ReminderRowActionDelete | ReminderRowActionCopy)],
         [[ReminderCategory alloc] initWithIdentifier:@"life"
                                         displayName:@"生活"
-                                         rowActions:ReminderRowActionDelete],
+                                         rowActions:(ReminderRowActionDelete | ReminderRowActionCopy)],
         [[ReminderCategory alloc] initWithIdentifier:@"quickCommand"
                                         displayName:@"快捷命令"
                                          rowActions:(ReminderRowActionDelete | ReminderRowActionCopy)],
         [[ReminderCategory alloc] initWithIdentifier:@"raycastCommand"
                                         displayName:@"Raycast命令"
-                                         rowActions:ReminderRowActionDelete]
+                                         rowActions:(ReminderRowActionDelete | ReminderRowActionCopy)]
     ];
 }
 

@@ -42,11 +42,10 @@ static void TestDefaultCategories(void) {
 
     AssertEqualObjects([categories valueForKey:@"identifier"], (@[@"work", @"life", @"quickCommand", @"raycastCommand"]), "default category order");
     AssertEqualObjects([categories valueForKey:@"displayName"], (@[@"工作", @"生活", @"快捷命令", @"Raycast命令"]), "default category display names");
-    AssertTrue(categories[0].rowActions == ReminderRowActionDelete, "work only deletes");
-    AssertTrue(categories[1].rowActions == ReminderRowActionDelete, "life only deletes");
-    AssertTrue((categories[2].rowActions & ReminderRowActionCopy) != 0, "quick command copies");
-    AssertTrue((categories[2].rowActions & ReminderRowActionDelete) != 0, "quick command deletes");
-    AssertTrue(categories[3].rowActions == ReminderRowActionDelete, "Raycast command behaves like work");
+    for (ReminderCategory *category in categories) {
+        AssertTrue((category.rowActions & ReminderRowActionCopy) != 0, "default category copies");
+        AssertTrue((category.rowActions & ReminderRowActionDelete) != 0, "default category deletes");
+    }
     AssertEqualObjects(store.currentCategoryID, @"work", "default category is work");
 }
 
@@ -72,8 +71,9 @@ static void TestAddRenameAndRemoveCategory(void) {
     NSString *categoryID = [store addCategoryWithDisplayName:@"  学习  "];
     AssertTrue(categoryID.length > 0, "custom category is created");
     AssertEqualObjects([store categoryForIdentifier:categoryID].displayName, @"学习", "custom category name is trimmed");
-    AssertTrue([store categoryForIdentifier:categoryID].rowActions == ReminderRowActionDelete,
-               "custom category behaves like work");
+    AssertTrue(([store categoryForIdentifier:categoryID].rowActions & ReminderRowActionCopy) != 0 &&
+               ([store categoryForIdentifier:categoryID].rowActions & ReminderRowActionDelete) != 0,
+               "custom category copies and deletes");
     AssertTrue([store addCategoryWithDisplayName:@"学习"] == nil, "duplicate category names are rejected");
 
     [store switchToCategory:categoryID];
@@ -124,6 +124,40 @@ static void TestLegacySnapshotMigration(void) {
     AssertEqualObjects([[store itemsForCategory:@"quickCommand"] valueForKey:@"content"], (@[@"legacy command"]), "legacy quick commands load");
 }
 
+static void TestDeleteOnlyCategoriesUpgradeToCopyAndDelete(void) {
+    NSURL *url = TemporaryStoreURL();
+    NSString *legacyJSON = @"{"
+        "\"schemaVersion\":3,"
+        "\"categoryDefinitions\":["
+            "{\"id\":\"work\",\"displayName\":\"工作\",\"rowActions\":1},"
+            "{\"id\":\"quickCommand\",\"displayName\":\"快捷命令\",\"rowActions\":3},"
+            "{\"id\":\"custom-abc\",\"displayName\":\"常规命令\",\"rowActions\":1}"
+        "],"
+        "\"categories\":{"
+            "\"work\":[{\"id\":\"w1\",\"category\":\"work\",\"content\":\"kept work\",\"createdAt\":\"2026-06-19T00:00:00Z\"}],"
+            "\"quickCommand\":[{\"id\":\"q1\",\"category\":\"quickCommand\",\"content\":\"kept command\",\"createdAt\":\"2026-06-19T00:00:01Z\"}],"
+            "\"custom-abc\":[{\"id\":\"c1\",\"category\":\"custom-abc\",\"content\":\"kept custom\",\"createdAt\":\"2026-06-19T00:00:02Z\"}]"
+        "}"
+        "}";
+    [legacyJSON writeToURL:url atomically:YES encoding:NSUTF8StringEncoding error:nil];
+
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:url];
+
+    AssertEqualObjects([store.categories valueForKey:@"identifier"],
+                       (@[@"work", @"quickCommand", @"custom-abc"]),
+                       "historical categories are preserved");
+    for (ReminderCategory *category in store.categories) {
+        AssertTrue((category.rowActions & ReminderRowActionCopy) != 0,
+                   "historical category gains copy on load");
+        AssertTrue((category.rowActions & ReminderRowActionDelete) != 0,
+                   "historical category keeps delete on load");
+    }
+    AssertEqualObjects([[store itemsForCategory:@"work"] valueForKey:@"content"], (@[@"kept work"]),
+                       "historical work items are preserved");
+    AssertEqualObjects([[store itemsForCategory:@"custom-abc"] valueForKey:@"content"], (@[@"kept custom"]),
+                       "historical custom items are preserved");
+}
+
 static void TestFlushWritesSchemaV3AndReloads(void) {
     NSURL *url = nil;
     ReminderStore *store = MakeStore(&url);
@@ -161,6 +195,7 @@ int main(void) {
         TestAddRenameAndRemoveCategory();
         TestDeleteOnlyRemovesFromMatchingCategory();
         TestLegacySnapshotMigration();
+        TestDeleteOnlyCategoriesUpgradeToCopyAndDelete();
         TestFlushWritesSchemaV3AndReloads();
         TestCorruptedJSONFallsBackToEmpty();
 
