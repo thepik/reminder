@@ -468,23 +468,155 @@ static void TestRowsUseNotesStyleHeightAndCommandTypography(void) {
     AssertTrue(textField.font.isFixedPitch, "quick command content must use readable monospaced typography");
 }
 
+static NSColor *ResolveColorForAppearance(NSColor *color, NSAppearance *appearance) {
+    __block NSColor *resolvedColor = nil;
+    [appearance performAsCurrentDrawingAppearance:^{
+        resolvedColor = [color colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    }];
+    return resolvedColor;
+}
+
+static BOOL ColorsMatch(NSColor *firstColor, NSColor *secondColor) {
+    NSColor *first = [firstColor colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    NSColor *second = [secondColor colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    if (!first || !second) {
+        return NO;
+    }
+    return fabs(first.redComponent - second.redComponent) < 0.01
+        && fabs(first.greenComponent - second.greenComponent) < 0.01
+        && fabs(first.blueComponent - second.blueComponent) < 0.01
+        && fabs(first.alphaComponent - second.alphaComponent) < 0.01;
+}
+
+static CGFloat RelativeLuminance(NSColor *color) {
+    NSColor *sRGB = [color colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    CGFloat components[3] = { sRGB.redComponent, sRGB.greenComponent, sRGB.blueComponent };
+    CGFloat linear[3];
+    for (NSUInteger index = 0; index < 3; index++) {
+        CGFloat component = components[index];
+        linear[index] = component <= 0.04045
+            ? component / 12.92
+            : pow((component + 0.055) / 1.055, 2.4);
+    }
+    return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
+}
+
+static CGFloat ContrastRatio(NSColor *firstColor, NSColor *secondColor) {
+    CGFloat first = RelativeLuminance(firstColor);
+    CGFloat second = RelativeLuminance(secondColor);
+    CGFloat lighter = MAX(first, second);
+    CGFloat darker = MIN(first, second);
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
 static void TestThemeFollowsLightAndDarkAppearance(void) {
     NSAppearance *lightAppearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
     NSAppearance *darkAppearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
-    __block NSColor *lightBackground = nil;
-    __block NSColor *darkBackground = nil;
+    NSArray<NSColor *> *adaptiveColors = @[
+        ReminderTheme.backgroundColor,
+        ReminderTheme.cardColor,
+        ReminderTheme.cardHoverColor,
+        ReminderTheme.accentColor,
+        ReminderTheme.accentPressedColor,
+        ReminderTheme.selectedSidebarItemColor,
+        ReminderTheme.placeholderColor,
+        ReminderTheme.dangerColor,
+        ReminderTheme.dangerHoverColor,
+        ReminderTheme.secondaryTextColor,
+        ReminderTheme.tertiaryTextColor,
+        ReminderTheme.primaryTextColor,
+        ReminderTheme.inputBorderColor,
+        ReminderTheme.inputBackgroundColor,
+        ReminderTheme.separatorColor
+    ];
 
-    [lightAppearance performAsCurrentDrawingAppearance:^{
-        lightBackground = [ReminderTheme.backgroundColor colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
-    }];
-    [darkAppearance performAsCurrentDrawingAppearance:^{
-        darkBackground = [ReminderTheme.backgroundColor colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
-    }];
+    for (NSColor *color in adaptiveColors) {
+        NSColor *lightColor = ResolveColorForAppearance(color, lightAppearance);
+        NSColor *darkColor = ResolveColorForAppearance(color, darkAppearance);
+        AssertTrue(lightColor != nil && darkColor != nil,
+                   "theme colors must resolve in both system appearances");
+        AssertTrue(!ColorsMatch(lightColor, darkColor),
+                   "adaptive theme colors must differ between light and dark appearance");
+    }
 
-    AssertTrue(lightBackground != nil && darkBackground != nil,
-               "theme colors must resolve in both system appearances");
-    AssertTrue(![lightBackground isEqual:darkBackground],
-               "theme background must adapt between light and dark appearance");
+    NSColor *lightTertiary = ResolveColorForAppearance(ReminderTheme.tertiaryTextColor, lightAppearance);
+    NSColor *lightBackground = ResolveColorForAppearance(ReminderTheme.backgroundColor, lightAppearance);
+    AssertTrue(lightTertiary != nil && lightBackground != nil,
+               "light secondary information colors must resolve for contrast checks");
+    AssertTrue(ContrastRatio(lightTertiary, lightBackground) >= 4.5,
+               "light tertiary text must remain readable on the main background");
+}
+
+static void TestViewsRefreshWhenAppearanceChanges(void) {
+    [NSApplication sharedApplication];
+    ReminderStore *store = [[ReminderStore alloc] initWithStorageURL:TemporaryStoreURL()];
+    [store addItemWithContent:@"appearance test"];
+    ReminderWindowController *controller = [[ReminderWindowController alloc] initWithStore:store];
+    NSWindow *window = controller.window;
+    NSView *rootView = window.contentView;
+    NSStackView *stackView = [controller valueForKey:@"stackView"];
+    ReminderRowView *row = (ReminderRowView *)stackView.arrangedSubviews.firstObject;
+    NSTextView *rowText = FindTextView(row);
+    InputBarView *inputBar = [controller valueForKey:@"inputBar"];
+    NSTextView *inputText = [inputBar valueForKey:@"textField"];
+    NSView *inputContainer = [inputBar valueForKey:@"inputContainer"];
+    NSButton *saveButton = [inputBar valueForKey:@"saveButton"];
+    CategoryTabView *tabView = [controller valueForKey:@"tabView"];
+    NSDictionary *sidebarButtons = [tabView valueForKey:@"buttonsByCategory"];
+    NSButton *selectedSidebarButton = sidebarButtons[@"work"];
+    inputText.string = @"draft text";
+
+    NSArray<NSAppearance *> *appearances = @[
+        [NSAppearance appearanceNamed:NSAppearanceNameAqua],
+        [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua],
+        [NSAppearance appearanceNamed:NSAppearanceNameAqua]
+    ];
+    for (NSAppearance *appearance in appearances) {
+        window.appearance = appearance;
+        [rootView layoutSubtreeIfNeeded];
+
+        NSColor *expectedBackground = ResolveColorForAppearance(ReminderTheme.backgroundColor, appearance);
+        NSColor *expectedCard = ResolveColorForAppearance(ReminderTheme.cardColor, appearance);
+        NSColor *expectedText = ResolveColorForAppearance(ReminderTheme.primaryTextColor, appearance);
+        NSColor *expectedPlaceholder = ResolveColorForAppearance(ReminderTheme.placeholderColor, appearance);
+        NSColor *expectedInput = ResolveColorForAppearance(ReminderTheme.inputBackgroundColor, appearance);
+        NSColor *expectedAccent = ResolveColorForAppearance(ReminderTheme.accentColor, appearance);
+        NSColor *expectedSidebarSelection = ResolveColorForAppearance(ReminderTheme.selectedSidebarItemColor, appearance);
+        NSColor *actualBackground = [NSColor colorWithCGColor:rootView.layer.backgroundColor];
+        NSColor *actualCard = [NSColor colorWithCGColor:row.layer.backgroundColor];
+        NSColor *actualInput = [NSColor colorWithCGColor:inputContainer.layer.backgroundColor];
+        NSColor *actualAccent = [NSColor colorWithCGColor:saveButton.layer.backgroundColor];
+        NSColor *actualSidebarSelection = [NSColor colorWithCGColor:selectedSidebarButton.layer.backgroundColor];
+        NSColor *actualRowText = ResolveColorForAppearance([rowText.textStorage attribute:NSForegroundColorAttributeName
+                                                                                    atIndex:0
+                                                                             effectiveRange:nil], appearance);
+        NSColor *actualInputText = ResolveColorForAppearance([inputText.textStorage attribute:NSForegroundColorAttributeName
+                                                                                        atIndex:0
+                                                                                 effectiveRange:nil], appearance);
+        NSAttributedString *placeholder = [inputText valueForKey:@"placeholderAttributedString"];
+        NSColor *actualPlaceholder = ResolveColorForAppearance([placeholder attribute:NSForegroundColorAttributeName
+                                                                               atIndex:0
+                                                                        effectiveRange:nil], appearance);
+
+        AssertTrue(ColorsMatch(actualBackground, expectedBackground),
+                   "window background must resolve using the current window appearance");
+        AssertTrue(ColorsMatch(actualCard, expectedCard),
+                   "row card must update when the window appearance changes");
+        AssertTrue(ColorsMatch(actualInput, expectedInput),
+                   "input background must update when the window appearance changes");
+        AssertTrue(ColorsMatch(actualAccent, expectedAccent),
+                   "save button must update when the window appearance changes");
+        AssertTrue(ColorsMatch(actualSidebarSelection, expectedSidebarSelection),
+                   "sidebar selection must update when the window appearance changes");
+        AssertTrue(ColorsMatch(actualRowText, expectedText),
+                   "row text storage must update when the window appearance changes");
+        AssertTrue(ColorsMatch(actualInputText, expectedText),
+                   "input text storage must update when the window appearance changes");
+        AssertTrue(ColorsMatch(actualPlaceholder, expectedPlaceholder),
+                   "input placeholder must update when the window appearance changes");
+    }
+
+    [window orderOut:nil];
 }
 
 static void TestSidebarUsesFullWidthAlignment(void) {
@@ -563,6 +695,7 @@ int main(void) {
         TestSaveAndDeleteUpdateSummaryAndFeedback();
         TestRowsUseNotesStyleHeightAndCommandTypography();
         TestThemeFollowsLightAndDarkAppearance();
+        TestViewsRefreshWhenAppearanceChanges();
         TestSidebarUsesFullWidthAlignment();
         TestSidebarSupportsRaycastAndCategoryManagement();
 

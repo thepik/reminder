@@ -22,6 +22,7 @@
 + (NSColor *)inputBackgroundColor;
 + (NSColor *)separatorColor;
 + (NSColor *)focusRingColor;
++ (CGColorRef)CGColorForColor:(NSColor *)color appearance:(NSAppearance *)appearance;
 + (NSFont *)regularFontOfSize:(CGFloat)size;
 + (NSFont *)mediumFontOfSize:(CGFloat)size;
 + (NSFont *)semiboldFontOfSize:(CGFloat)size;

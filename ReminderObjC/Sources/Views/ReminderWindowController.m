@@ -35,7 +35,8 @@
 }
 
 - (void)updateBackground {
-    self.layer.backgroundColor = ReminderTheme.backgroundColor.CGColor;
+    self.layer.backgroundColor = [ReminderTheme CGColorForColor:ReminderTheme.backgroundColor
+                                                      appearance:self.effectiveAppearance];
 }
 
 @end
@@ -61,7 +62,8 @@
 }
 
 - (void)updateSeparator {
-    self.layer.backgroundColor = ReminderTheme.separatorColor.CGColor;
+    self.layer.backgroundColor = [ReminderTheme CGColorForColor:ReminderTheme.separatorColor
+                                                      appearance:self.effectiveAppearance];
 }
 
 @end
@@ -87,6 +89,23 @@
 
 - (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(NSView *)controlView {
     [super drawInteriorWithFrame:[self drawingRectForBounds:cellFrame] inView:controlView];
+}
+
+@end
+
+@interface ReminderToastTextField : NSTextField
+@end
+
+@implementation ReminderToastTextField
+
+- (void)viewDidChangeEffectiveAppearance {
+    [super viewDidChangeEffectiveAppearance];
+    [self updateToastAppearance];
+}
+
+- (void)updateToastAppearance {
+    self.layer.backgroundColor = [ReminderTheme CGColorForColor:ReminderTheme.toastBackgroundColor
+                                                      appearance:self.effectiveAppearance];
 }
 
 @end
@@ -575,16 +594,21 @@
 }
 
 - (NSTextField *)makeToastLabel {
-    NSTextField *label = [NSTextField labelWithString:@"已复制"];
+    ReminderToastTextField *label = [[ReminderToastTextField alloc] initWithFrame:NSZeroRect];
+    label.stringValue = @"已复制";
+    label.editable = NO;
+    label.selectable = NO;
+    label.bezeled = NO;
+    label.drawsBackground = NO;
     label.cell = [[ReminderToastTextFieldCell alloc] initTextCell:@"已复制"];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.alignment = NSTextAlignmentCenter;
     label.font = [ReminderTheme semiboldFontOfSize:12];
     label.textColor = NSColor.whiteColor;
     label.wantsLayer = YES;
-    label.layer.backgroundColor = ReminderTheme.toastBackgroundColor.CGColor;
     label.layer.cornerRadius = 15.0;
     label.layer.masksToBounds = YES;
+    [label updateToastAppearance];
     return label;
 }
 

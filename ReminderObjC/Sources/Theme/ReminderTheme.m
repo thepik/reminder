@@ -20,6 +20,19 @@
     }];
 }
 
++ (CGColorRef)CGColorForColor:(NSColor *)color appearance:(NSAppearance *)appearance {
+    if (!color) {
+        return nil;
+    }
+
+    __block NSColor *resolvedColor = nil;
+    NSAppearance *drawingAppearance = appearance ?: NSAppearance.currentDrawingAppearance;
+    [drawingAppearance performAsCurrentDrawingAppearance:^{
+        resolvedColor = [color colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+    }];
+    return (resolvedColor ?: color).CGColor;
+}
+
 + (NSColor *)backgroundColor {
     return [self dynamicColorNamed:@"ReminderBackground" light:0xF7F7F5 dark:0x1E1E1E];
 }
@@ -57,7 +70,7 @@
 }
 
 + (NSColor *)placeholderColor {
-    return [self dynamicColorNamed:@"ReminderPlaceholder" light:0x989894 dark:0x8E8E93];
+    return [self dynamicColorNamed:@"ReminderPlaceholder" light:0x72726D dark:0x8E8E93];
 }
 
 + (NSColor *)dangerColor {
@@ -73,7 +86,7 @@
 }
 
 + (NSColor *)tertiaryTextColor {
-    return [self dynamicColorNamed:@"ReminderTertiaryText" light:0x8A8A86 dark:0x7D7D80];
+    return [self dynamicColorNamed:@"ReminderTertiaryText" light:0x6F6F6A dark:0x7D7D80];
 }
 
 + (NSColor *)primaryTextColor {

@@ -162,9 +162,11 @@ static NSScrollView *ReminderAncestorScrollView(NSView *view) {
     self.attributedTitle = [ReminderTheme buttonTitle:self.feedbackTitle ?: @""
                                                 color:titleColor ?: ReminderTheme.secondaryTextColor
                                                  font:font];
-    self.layer.backgroundColor = (self.pointerInside && !self.isHighlighted)
-        ? (self.feedbackHoverBackgroundColor ?: NSColor.clearColor).CGColor
-        : NSColor.clearColor.CGColor;
+    NSColor *backgroundColor = (self.pointerInside && !self.isHighlighted)
+        ? (self.feedbackHoverBackgroundColor ?: NSColor.clearColor)
+        : NSColor.clearColor;
+    self.layer.backgroundColor = [ReminderTheme CGColorForColor:backgroundColor
+                                                      appearance:self.effectiveAppearance];
     self.alphaValue = self.isHighlighted ? 0.72 : 1.0;
 }
 
@@ -188,9 +190,11 @@ static NSScrollView *ReminderAncestorScrollView(NSView *view) {
         _item = item;
 
         self.wantsLayer = YES;
-        self.layer.backgroundColor = ReminderTheme.cardColor.CGColor;
+        self.layer.backgroundColor = [ReminderTheme CGColorForColor:ReminderTheme.cardColor
+                                                          appearance:self.effectiveAppearance];
         self.layer.cornerRadius = 11.0;
-        self.layer.borderColor = ReminderTheme.separatorColor.CGColor;
+        self.layer.borderColor = [ReminderTheme CGColorForColor:ReminderTheme.separatorColor
+                                                       appearance:self.effectiveAppearance];
         self.layer.borderWidth = 0.5;
         self.translatesAutoresizingMaskIntoConstraints = NO;
 
@@ -226,6 +230,7 @@ static NSScrollView *ReminderAncestorScrollView(NSView *view) {
             ? [ReminderTheme monospacedFontOfSize:14]
             : [ReminderTheme mediumFontOfSize:15];
         _contentTextView.textColor = ReminderTheme.primaryTextColor;
+        [self updateTextAppearance];
         _contentTextView.toolTip = item.content ?: @"";
         _contentTextView.accessibilityLabel = item.content ?: @"";
         _contentScrollView.documentView = _contentTextView;
@@ -396,12 +401,26 @@ static NSScrollView *ReminderAncestorScrollView(NSView *view) {
 
 - (void)viewDidChangeEffectiveAppearance {
     [super viewDidChangeEffectiveAppearance];
+    [self updateTextAppearance];
     [self updateCardAppearance];
 }
 
+- (void)updateTextAppearance {
+    NSColor *textColor = ReminderTheme.primaryTextColor;
+    self.contentTextView.textColor = textColor;
+    if (self.contentTextView.textStorage.length > 0) {
+        [self.contentTextView.textStorage addAttribute:NSForegroundColorAttributeName
+                                                 value:textColor
+                                                 range:NSMakeRange(0, self.contentTextView.textStorage.length)];
+    }
+}
+
 - (void)updateCardAppearance {
-    self.layer.backgroundColor = (self.pointerInside ? ReminderTheme.cardHoverColor : ReminderTheme.cardColor).CGColor;
-    self.layer.borderColor = ReminderTheme.separatorColor.CGColor;
+    NSColor *backgroundColor = self.pointerInside ? ReminderTheme.cardHoverColor : ReminderTheme.cardColor;
+    self.layer.backgroundColor = [ReminderTheme CGColorForColor:backgroundColor
+                                                      appearance:self.effectiveAppearance];
+    self.layer.borderColor = [ReminderTheme CGColorForColor:ReminderTheme.separatorColor
+                                                   appearance:self.effectiveAppearance];
 }
 
 - (void)copyPressed:(id)sender {

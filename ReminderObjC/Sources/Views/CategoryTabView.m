@@ -138,9 +138,12 @@
     } else if (self.isHighlighted || self.pointerInside) {
         backgroundColor = [ReminderTheme.selectedSidebarItemColor colorWithAlphaComponent:0.52];
     }
-    self.layer.backgroundColor = backgroundColor.CGColor;
+    self.layer.backgroundColor = [ReminderTheme CGColorForColor:backgroundColor
+                                                      appearance:self.effectiveAppearance];
     BOOL focused = self.window.firstResponder == self;
-    self.layer.borderColor = (focused ? ReminderTheme.focusRingColor : NSColor.clearColor).CGColor;
+    NSColor *borderColor = focused ? ReminderTheme.focusRingColor : NSColor.clearColor;
+    self.layer.borderColor = [ReminderTheme CGColorForColor:borderColor
+                                                  appearance:self.effectiveAppearance];
     self.layer.borderWidth = focused ? 2.0 : 0.0;
     self.alphaValue = self.isHighlighted ? 0.72 : 1.0;
     [self updateTitle];
