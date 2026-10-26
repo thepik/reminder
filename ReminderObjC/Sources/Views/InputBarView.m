@@ -146,7 +146,8 @@ static const NSUInteger ReminderInputMaximumVisibleLines = 3;
 
 - (void)updateVisualState {
     NSColor *backgroundColor = self.isHighlighted ? ReminderTheme.accentPressedColor : ReminderTheme.accentColor;
-    self.layer.backgroundColor = backgroundColor.CGColor;
+    self.layer.backgroundColor = [ReminderTheme CGColorForColor:backgroundColor
+                                                      appearance:self.effectiveAppearance];
     self.alphaValue = self.enabled ? (self.pointerInside ? 0.88 : 1.0) : 0.45;
     self.attributedTitle = [ReminderTheme buttonTitle:@"保存"
                                                 color:ReminderTheme.accentTextColor
@@ -174,8 +175,10 @@ static const NSUInteger ReminderInputMaximumVisibleLines = 3;
 
         _inputContainer = [[NSView alloc] init];
         _inputContainer.wantsLayer = YES;
-        _inputContainer.layer.backgroundColor = ReminderTheme.inputBackgroundColor.CGColor;
-        _inputContainer.layer.borderColor = ReminderTheme.inputBorderColor.CGColor;
+        _inputContainer.layer.backgroundColor = [ReminderTheme CGColorForColor:ReminderTheme.inputBackgroundColor
+                                                                      appearance:self.effectiveAppearance];
+        _inputContainer.layer.borderColor = [ReminderTheme CGColorForColor:ReminderTheme.inputBorderColor
+                                                                  appearance:self.effectiveAppearance];
         _inputContainer.layer.borderWidth = 1;
         _inputContainer.layer.cornerRadius = 12;
         _inputContainer.layer.shadowColor = NSColor.blackColor.CGColor;
@@ -258,6 +261,7 @@ static const NSUInteger ReminderInputMaximumVisibleLines = 3;
             [_saveButton.heightAnchor constraintEqualToConstant:34],
         ]];
 
+        [self updateTextAppearance];
         [self updateSaveButton];
     }
     return self;
@@ -325,6 +329,7 @@ static const NSUInteger ReminderInputMaximumVisibleLines = 3;
 
 - (void)viewDidChangeEffectiveAppearance {
     [super viewDidChangeEffectiveAppearance];
+    [self updateTextAppearance];
     [self updateContainerAppearance];
 }
 
@@ -379,9 +384,38 @@ static const NSUInteger ReminderInputMaximumVisibleLines = 3;
     }
 }
 
+- (void)updateTextAppearance {
+    NSColor *textColor = ReminderTheme.primaryTextColor;
+    self.textField.textColor = textColor;
+
+    NSMutableDictionary<NSAttributedStringKey, id> *typingAttributes = [self.textField.typingAttributes mutableCopy]
+        ?: [NSMutableDictionary dictionary];
+    typingAttributes[NSFontAttributeName] = self.textField.font;
+    typingAttributes[NSForegroundColorAttributeName] = textColor;
+    self.textField.typingAttributes = typingAttributes;
+
+    if (self.textField.textStorage.length > 0) {
+        [self.textField.textStorage addAttribute:NSForegroundColorAttributeName
+                                           value:textColor
+                                           range:NSMakeRange(0, self.textField.textStorage.length)];
+    }
+
+    NSAttributedString *placeholder = self.textField.placeholderAttributedString;
+    if (placeholder.length > 0) {
+        NSMutableAttributedString *updatedPlaceholder = [placeholder mutableCopy];
+        [updatedPlaceholder addAttribute:NSForegroundColorAttributeName
+                                   value:ReminderTheme.placeholderColor
+                                   range:NSMakeRange(0, placeholder.length)];
+        self.textField.placeholderAttributedString = updatedPlaceholder;
+    }
+}
+
 - (void)updateContainerAppearance {
-    self.inputContainer.layer.backgroundColor = ReminderTheme.inputBackgroundColor.CGColor;
-    self.inputContainer.layer.borderColor = (self.inputFocused ? ReminderTheme.focusRingColor : ReminderTheme.inputBorderColor).CGColor;
+    self.inputContainer.layer.backgroundColor = [ReminderTheme CGColorForColor:ReminderTheme.inputBackgroundColor
+                                                                      appearance:self.effectiveAppearance];
+    NSColor *borderColor = self.inputFocused ? ReminderTheme.focusRingColor : ReminderTheme.inputBorderColor;
+    self.inputContainer.layer.borderColor = [ReminderTheme CGColorForColor:borderColor
+                                                                  appearance:self.effectiveAppearance];
     self.inputContainer.layer.borderWidth = self.inputFocused ? 2.0 : 1.0;
     self.inputContainer.layer.shadowOpacity = self.inputFocused ? 0.13 : 0.08;
 }
